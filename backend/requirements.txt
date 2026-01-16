@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+sqlalchemy
+psycopg2-binary
+pgvector
+agno
+groq
+python-multipart
+pypdf
+python-docx
+pydantic
+pydantic-settings
+sqlmodel
