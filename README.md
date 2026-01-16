@@ -47,8 +47,8 @@ A personal knowledge assistant powered by RAG (Retrieval Augmented Generation). 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/ikhwanand/cognify-app.git
-cd cognify-app
+git clone https://github.com/ikhwanand/cognify-app-ai.git
+cd cognify-app-ai
 ```
 
 ### 2. Setup Backend
