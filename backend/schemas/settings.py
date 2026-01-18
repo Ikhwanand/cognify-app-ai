@@ -19,6 +19,7 @@ class UserSettings(SQLModel):
     auto_scroll: bool = True
     send_on_enter: bool = True
     show_timestamps: bool = True
+    enable_streaming: bool = True
 
 
 class SettingsUpdate(UserSettings):

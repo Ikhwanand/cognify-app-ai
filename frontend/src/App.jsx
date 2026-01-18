@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Sidebar } from '@/components/Sidebar'
 import { ChatArea } from '@/components/ChatArea'
 import { Header } from '@/components/Header'
@@ -25,6 +25,13 @@ function App() {
   const [messages, setMessages] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [isBackendOnline, setIsBackendOnline] = useState(false)
+  
+  // Streaming state
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [streamingMessage, setStreamingMessage] = useState(null)
+  const streamCancelRef = useRef(null)
+  const streamingContentRef = useRef('')
+  const streamingFinalizedRef = useRef(false)
   
   // Settings state
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -206,6 +213,30 @@ function App() {
     }
   }, [isBackendOnline, selectedChatId])
 
+  const handleStopStreaming = useCallback(() => {
+    if (streamCancelRef.current) {
+      streamCancelRef.current.cancel()
+      streamCancelRef.current = null
+    }
+    setIsStreaming(false)
+    
+    // Finalize the streaming message using ref content
+    if (!streamingFinalizedRef.current && streamingContentRef.current) {
+      streamingFinalizedRef.current = true
+      const content = streamingContentRef.current
+      setStreamingMessage(null)
+      setMessages(prev => [...prev, {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: content + " [cancelled]",
+        timestamp: new Date().toISOString(),
+        isStreaming: false
+      }])
+    } else {
+      setStreamingMessage(null)
+    }
+  }, [])
+
   const handleSendMessage = useCallback(async (content) => {
     // Add user message immediately for responsiveness
     const userMessage = {
@@ -215,75 +246,175 @@ function App() {
       timestamp: new Date().toISOString()
     }
     setMessages(prev => [...prev, userMessage])
-    setIsLoading(true)
     
-    try {
-      if (isBackendOnline) {
-        // Send message to backend
-        const response = await chatAPI.sendMessage(
-          content,
-          selectedChatId,
-          settings.top_k,
-          settings.include_sources
-        )
-        
-        // Update selected chat ID if this was a new chat
-        if (!selectedChatId && response.session_id) {
-          setSelectedChatId(response.session_id)
+    // Check if streaming is enabled
+    const enableStreaming = settings.enable_streaming ?? settings.enableStreaming ?? true
+    
+    if (isBackendOnline && enableStreaming) {
+      // Use streaming API - reset refs
+      streamingContentRef.current = ''
+      streamingFinalizedRef.current = false
+      
+      setIsStreaming(true)
+      setStreamingMessage({
+        id: `streaming-${Date.now()}`,
+        role: 'assistant',
+        content: '',
+        isStreaming: true
+      })
+      
+      let _currentSessionId = selectedChatId
+      
+      const streamHandle = chatAPI.sendMessageStream(
+        content,
+        selectedChatId,
+        settings.top_k ?? settings.topK ?? 5,
+        settings.include_sources ?? settings.includeSources ?? true,
+        // onChunk
+        (data) => {
+          if (data.type === 'session_id' && data.session_id) {
+            _currentSessionId = data.session_id
+            setSelectedChatId(data.session_id)
+            
+            // Only add NEW chat to history (check if session already exists)
+            setChatHistory(prev => {
+              const exists = prev.some(chat => chat.id === data.session_id)
+              if (exists) {
+                return prev // Session already exists, don't add duplicate
+              }
+              const newChat = {
+                id: data.session_id,
+                title: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
+                timestamp: new Date().toISOString()
+              }
+              return [newChat, ...prev]
+            })
+          } else if (data.type === 'chunk' && data.content) {
+            // Store in ref for finalization
+            streamingContentRef.current += data.content
+            setStreamingMessage(prev => prev ? {
+              ...prev,
+              content: prev.content + data.content
+            } : prev)
+          }
+        },
+        // onDone
+        (data) => {
+          setIsStreaming(false)
+          streamCancelRef.current = null
           
-          // Add new chat to history
-          const newChat = {
-            id: response.session_id,
-            title: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
+          // Only finalize once using ref flag
+          if (!streamingFinalizedRef.current && streamingContentRef.current) {
+            streamingFinalizedRef.current = true
+            const finalContent = streamingContentRef.current
+            
+            // Clear streaming message first
+            setStreamingMessage(null)
+            
+            // Then add final message
+            const finalMessage = {
+              id: data.message_id || `msg-${Date.now()}`,
+              role: 'assistant',
+              content: finalContent + (data.cancelled ? ' [cancelled]' : ''),
+              timestamp: new Date().toISOString(),
+              isStreaming: false
+            }
+            setMessages(msgs => [...msgs, finalMessage])
+          } else {
+            setStreamingMessage(null)
+          }
+        },
+        // onError
+        (error) => {
+          setIsStreaming(false)
+          streamCancelRef.current = null
+          streamingFinalizedRef.current = true
+          setStreamingMessage(null)
+          
+          const errorMessage = {
+            id: `error-${Date.now()}`,
+            role: 'assistant',
+            content: `❌ **Streaming Error**\n\n${error.message}`,
             timestamp: new Date().toISOString()
           }
-          setChatHistory(prev => [newChat, ...prev])
+          setMessages(prev => [...prev, errorMessage])
         }
+      )
+      
+      streamCancelRef.current = streamHandle
+      
+    } else {
+      // Use non-streaming API
+      setIsLoading(true)
+      
+      try {
+        if (isBackendOnline) {
+          // Send message to backend
+          const response = await chatAPI.sendMessage(
+            content,
+            selectedChatId,
+            settings.top_k ?? settings.topK ?? 5,
+            settings.include_sources ?? settings.includeSources ?? true
+          )
+          
+          // Update selected chat ID if this was a new chat
+          if (!selectedChatId && response.session_id) {
+            setSelectedChatId(response.session_id)
+            
+            // Add new chat to history
+            const newChat = {
+              id: response.session_id,
+              title: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
+              timestamp: new Date().toISOString()
+            }
+            setChatHistory(prev => [newChat, ...prev])
+          }
 
-        // Add assistant response
-        const assistantMessage = {
-          id: response.id,
-          role: 'assistant',
-          content: response.content,
-          sources: response.sources_json ? JSON.parse(response.sources_json) : null,
-          timestamp: response.created_at
-        }
-        setMessages(prev => [...prev, assistantMessage])
-      } else {
-        // Fallback: simulated response when backend is offline
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        // Create local chat if needed
-        if (!selectedChatId) {
-          const newChatId = `chat-${Date.now()}`
-          const newChat = {
-            id: newChatId,
-            title: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
+          // Add assistant response
+          const assistantMessage = {
+            id: response.id,
+            role: 'assistant',
+            content: response.content,
+            sources: response.sources_json ? JSON.parse(response.sources_json) : null,
+            timestamp: response.created_at
+          }
+          setMessages(prev => [...prev, assistantMessage])
+        } else {
+          // Fallback: simulated response when backend is offline
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          
+          // Create local chat if needed
+          if (!selectedChatId) {
+            const newChatId = `chat-${Date.now()}`
+            const newChat = {
+              id: newChatId,
+              title: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
+              timestamp: new Date().toISOString()
+            }
+            setChatHistory(prev => [newChat, ...prev])
+            setSelectedChatId(newChatId)
+          }
+
+          const assistantMessage = {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            content: `⚠️ **Backend Offline**\n\nThe backend server is not running. Please start the backend with:\n\n\`\`\`bash\ncd backend\nuvicorn main:app --reload\n\`\`\`\n\nYour message: "${content}"`,
             timestamp: new Date().toISOString()
           }
-          setChatHistory(prev => [newChat, ...prev])
-          setSelectedChatId(newChatId)
+          setMessages(prev => [...prev, assistantMessage])
         }
-
-        const assistantMessage = {
-          id: `assistant-${Date.now()}`,
+      } catch (error) {
+        console.error('Error sending message:', error)
+        const errorMessage = {
+          id: `error-${Date.now()}`,
           role: 'assistant',
-          content: `⚠️ **Backend Offline**\n\nThe backend server is not running. Please start the backend with:\n\n\`\`\`bash\ncd backend\nuvicorn main:app --reload\n\`\`\`\n\nYour message: "${content}"`,
+          content: `❌ **Error**\n\n${error.message}\n\nPlease check if the backend is running correctly.`,
           timestamp: new Date().toISOString()
         }
-        setMessages(prev => [...prev, assistantMessage])
+        setMessages(prev => [...prev, errorMessage])
+      } finally {
+        setIsLoading(false)
       }
-    } catch (error) {
-      console.error('Error sending message:', error)
-      const errorMessage = {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: `❌ **Error**\n\n${error.message}\n\nPlease check if the backend is running correctly.`,
-        timestamp: new Date().toISOString()
-      }
-      setMessages(prev => [...prev, errorMessage])
-    } finally {
-      setIsLoading(false)
     }
   }, [selectedChatId, settings, isBackendOnline])
 
@@ -353,8 +484,11 @@ function App() {
         
         <ChatArea
           messages={messages}
+          streamingMessage={streamingMessage}
           onSendMessage={handleSendMessage}
+          onStopStreaming={handleStopStreaming}
           isLoading={isLoading}
+          isStreaming={isStreaming}
           className="flex-1"
         />
       </div>
@@ -372,3 +506,4 @@ function App() {
 }
 
 export default App
+

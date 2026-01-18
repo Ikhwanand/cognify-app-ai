@@ -50,6 +50,7 @@ const defaultSettings = {
   autoScroll: true,
   sendOnEnter: true,
   showTimestamps: true,
+  enableStreaming: true,
 }
 
 const SettingsModal = ({ 
@@ -303,6 +304,20 @@ const SettingsModal = ({
                   id="showTimestamps"
                   checked={localSettings.showTimestamps}
                   onCheckedChange={(checked) => updateSetting('showTimestamps', checked)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="enableStreaming">Enable Streaming</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Stream AI responses in real-time
+                  </p>
+                </div>
+                <Switch
+                  id="enableStreaming"
+                  checked={localSettings.enableStreaming}
+                  onCheckedChange={(checked) => updateSetting('enableStreaming', checked)}
                 />
               </div>
             </div>

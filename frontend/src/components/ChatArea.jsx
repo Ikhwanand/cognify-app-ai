@@ -3,12 +3,12 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, Bot, User, Loader2, Sparkles } from "lucide-react"
+import { Send, User, Loader2, Sparkles, Square } from "lucide-react"
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-const ChatMessage = ({ message, isUser }) => {
+const ChatMessage = ({ message, isUser, isStreaming = false }) => {
   return (
     <div className={cn(
       "flex gap-3 p-4",
@@ -23,6 +23,8 @@ const ChatMessage = ({ message, isUser }) => {
       )}>
         {isUser ? (
           <User className="h-4 w-4" />
+        ) : isStreaming ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
           <Sparkles className="h-4 w-4" />
         )}
@@ -75,11 +77,11 @@ const ChatMessage = ({ message, isUser }) => {
               a: ({node, ...props}) => <a className="text-blue-500 underline hover:text-blue-600" target="_blank" rel="noopener noreferrer" {...props} />,
             }}
           >
-            {message.content}
+            {message.content || (isStreaming ? "▌" : "")}
           </ReactMarkdown>
         </div>
         
-        {message.timestamp && (
+        {message.timestamp && !isStreaming && (
           <p className={cn(
             "text-xs mt-2 opacity-70",
             isUser ? "text-primary-foreground" : "text-muted-foreground"
@@ -101,7 +103,7 @@ const WelcomeScreen = () => {
       <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-purple-500 to-pink-500 flex items-center justify-center mb-6">
         <Sparkles className="h-8 w-8 text-white" />
       </div>
-      <h1 className="text-2xl font-bold mb-2">Personal Knowledge AI</h1>
+      <h1 className="text-2xl font-bold mb-2">Cognify AI</h1>
       <p className="text-muted-foreground max-w-md mb-8">
         Upload your documents and ask questions. I'll help you find answers from your personal knowledge base.
       </p>
@@ -128,30 +130,39 @@ const WelcomeScreen = () => {
 
 const ChatArea = ({ 
   messages = [], 
+  streamingMessage = null,
   onSendMessage, 
+  onStopStreaming,
   isLoading = false,
+  isStreaming = false,
   className 
 }) => {
   const [input, setInput] = React.useState("")
   const scrollRef = React.useRef(null)
   const textareaRef = React.useRef(null)
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive or streaming updates
   React.useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, streamingMessage])
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (input.trim() && !isLoading) {
+    if (input.trim() && !isLoading && !isStreaming) {
       onSendMessage(input.trim())
       setInput("")
       // Reset textarea height
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto'
       }
+    }
+  }
+
+  const handleStopClick = () => {
+    if (isStreaming && onStopStreaming) {
+      onStopStreaming()
     }
   }
 
@@ -170,10 +181,14 @@ const ChatArea = ({
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px'
   }
 
+  const allMessages = streamingMessage 
+    ? [...messages, streamingMessage]
+    : messages
+
   return (
     <div className={cn("flex flex-col h-full overflow-hidden", className)}>
       {/* Messages Area */}
-      {messages.length === 0 ? (
+      {allMessages.length === 0 ? (
         <WelcomeScreen />
       ) : (
         <div 
@@ -181,16 +196,17 @@ const ChatArea = ({
           className="flex-1 overflow-y-auto min-h-0"
         >
           <div className="max-w-4xl mx-auto py-4">
-            {messages.map((message, index) => (
+            {allMessages.map((message, index) => (
               <ChatMessage 
-                key={message.id || index} 
+                key={message.id || `msg-${index}`} 
                 message={message} 
-                isUser={message.role === 'user'} 
+                isUser={message.role === 'user'}
+                isStreaming={message.isStreaming}
               />
             ))}
             
-            {/* Loading indicator */}
-            {isLoading && (
+            {/* Loading indicator (only when not streaming) */}
+            {isLoading && !isStreaming && (
               <div className="flex gap-3 p-4">
                 <div className="shrink-0 w-8 h-8 rounded-full bg-linear-to-br from-purple-500 to-pink-500 flex items-center justify-center">
                   <Loader2 className="h-4 w-4 text-white animate-spin" />
@@ -220,23 +236,35 @@ const ChatArea = ({
               placeholder="Ask a question about your documents..."
               className="flex-1 min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 py-3 px-4"
               rows={1}
-              disabled={isLoading}
+              disabled={isLoading || isStreaming}
             />
-            <Button
-              type="submit"
-              size="icon"
-              disabled={!input.trim() || isLoading}
-              className="h-10 w-10 rounded-xl shrink-0"
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
+            {isStreaming ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="destructive"
+                onClick={handleStopClick}
+                className="h-10 w-10 rounded-xl shrink-0"
+              >
+                <Square className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                size="icon"
+                disabled={!input.trim() || isLoading}
+                className="h-10 w-10 rounded-xl shrink-0"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            )}
           </div>
           <p className="text-xs text-muted-foreground text-center mt-2">
-            Press Enter to send, Shift+Enter for new line
+            {isStreaming ? "Click stop to cancel streaming" : "Press Enter to send, Shift+Enter for new line"}
           </p>
         </form>
       </div>
@@ -245,3 +273,4 @@ const ChatArea = ({
 }
 
 export { ChatArea, ChatMessage, WelcomeScreen }
+

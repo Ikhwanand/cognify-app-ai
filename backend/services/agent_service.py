@@ -66,6 +66,23 @@ class AgentService:
 
         return agent
 
+    def _build_enhanced_message(
+        self, message: str, context: Optional[List[str]] = None
+    ) -> str:
+        """Build enhanced message with RAG context"""
+        if context:
+            context_text = "\n\n".join(context)
+            return f"""Based on the following context from the knowledge base:
+
+---
+{context_text}
+---
+
+User question: {message}
+
+Please answer the question based on the context provided. If the context doesn't contain relevant information, say so."""
+        return message
+
     async def chat(
         self,
         message: str,
@@ -73,7 +90,7 @@ class AgentService:
         context: Optional[List[str]] = None,
         user_settings: Optional[Dict] = None,
     ) -> str:
-        """Send a message and get a response"""
+        """Send a message and get a response (non-streaming)"""
 
         # Extract settings
         model = user_settings.get("model") if user_settings else None
@@ -87,25 +104,45 @@ class AgentService:
             session_id=session_id,
         )
 
-        # If context is provided (from RAG), add it to the message
-        if context:
-            context_text = "\n\n".join(context)
-            enhanced_message = f"""Based on the following context from the knowledge base:
-
----
-{context_text}
----
-
-User question: {message}
-
-Please answer the question based on the context provided. If the context doesn't contain relevant information, say so."""
-        else:
-            enhanced_message = message
+        enhanced_message = self._build_enhanced_message(message, context)
 
         # Get response
         response = agent.run(enhanced_message)
 
         return response.content
+
+    async def chat_stream(
+        self,
+        message: str,
+        session_id: Optional[str] = None,
+        context: Optional[List[str]] = None,
+        user_settings: Optional[Dict] = None,
+    ):
+        """Send a message and stream the response"""
+        import asyncio
+
+        # Extract settings
+        model = user_settings.get("model") if user_settings else None
+        temperature = user_settings.get("temperature") if user_settings else None
+        system_prompt = user_settings.get("system_prompt") if user_settings else None
+
+        agent = self.create_agent(
+            model=model,
+            temperature=temperature,
+            system_prompt=system_prompt,
+            session_id=session_id,
+        )
+
+        enhanced_message = self._build_enhanced_message(message, context)
+
+        # Stream response using Agno's run method with stream=True
+        response_stream = agent.run(enhanced_message, stream=True)
+
+        for chunk in response_stream:
+            if chunk.content:
+                yield chunk.content
+            # Small yield to allow cancellation check
+            await asyncio.sleep(0)
 
 
 agent_service = AgentService()

@@ -42,7 +42,7 @@ export const chatAPI = {
   // Delete a chat session
   deleteSession: (sessionId) => fetchAPI(`/chat/sessions/${sessionId}`, { method: 'DELETE' }),
 
-  // Send a message and get AI response
+  // Send a message and get AI response (non-streaming)
   sendMessage: (content, sessionId = null, topK = 5, includeSources = true) => {
     const params = new URLSearchParams({
       top_k: topK.toString(),
@@ -56,6 +56,97 @@ export const chatAPI = {
         session_id: sessionId,
       }),
     });
+  },
+
+  // Send a message with streaming response
+  sendMessageStream: (content, sessionId = null, topK = 5, includeSources = true, onChunk, onDone, onError) => {
+    const params = new URLSearchParams({
+      top_k: topK.toString(),
+      include_sources: includeSources.toString(),
+    });
+    
+    const abortController = new AbortController();
+    let streamId = null;
+    
+    const fetchStream = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/chat/message/stream?${params}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            content,
+            session_id: sessionId,
+          }),
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ detail: 'Stream error' }));
+          throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                
+                if (data.type === 'start') {
+                  streamId = data.stream_id;
+                  if (data.session_id) {
+                    onChunk?.({ type: 'session_id', session_id: data.session_id });
+                  }
+                } else if (data.type === 'chunk') {
+                  onChunk?.(data);
+                } else if (data.type === 'done') {
+                  onDone?.(data);
+                } else if (data.type === 'error') {
+                  onError?.(new Error(data.error));
+                }
+              } catch (e) {
+                console.error('Failed to parse SSE data:', e);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          onError?.(error);
+        }
+      }
+    };
+
+    fetchStream();
+
+    // Return cancel function
+    return {
+      cancel: async () => {
+        abortController.abort();
+        if (streamId) {
+          try {
+            await fetch(`${API_BASE_URL}/chat/message/cancel/${streamId}`, {
+              method: 'POST',
+            });
+          } catch (e) {
+            console.error('Failed to cancel stream:', e);
+          }
+        }
+      },
+    };
   },
 };
 
