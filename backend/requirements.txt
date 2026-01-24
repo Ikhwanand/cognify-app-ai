@@ -12,3 +12,12 @@ python-docx
 pydantic
 pydantic-settings
 sqlmodel
+
+# Agno tool dependencies
+ddgs
+yfinance
+wikipedia
+arxiv
+newspaper4k
+youtube-transcript-api
+lxml_html_clean

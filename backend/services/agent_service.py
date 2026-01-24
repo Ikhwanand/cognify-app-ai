@@ -4,12 +4,20 @@ from agno.models.nvidia import Nvidia
 from agno.db.postgres import PostgresDb
 from agno.vectordb.pgvector import PgVector, SearchType
 from agno.knowledge.embedder.sentence_transformer import SentenceTransformerEmbedder
-from agno.tools.duckduckgo import DuckDuckGoTools
-from agno.tools.yfinance import YFinanceTools
 from agno.knowledge import Knowledge
 from config import settings
 from typing import Optional, List, Dict
 import os
+
+# Import tools - No API key required
+from agno.tools.websearch import WebSearchTools
+from agno.tools.yfinance import YFinanceTools
+from agno.tools.wikipedia import WikipediaTools
+from agno.tools.arxiv import ArxivTools
+from agno.tools.calculator import CalculatorTools
+from agno.tools.newspaper4k import Newspaper4kTools
+from agno.tools.reasoning import ReasoningTools
+from agno.tools.youtube import YouTubeTools
 
 os.environ["GROQ_API_KEY"] = settings.groq_api_key
 os.environ["NVIDIA_API_KEY"] = settings.nvidia_api_key
@@ -27,6 +35,18 @@ class AgentService:
             search_type=SearchType.hybrid,
         )
 
+        # Initialize all available tools
+        self.tools = [
+            WebSearchTools(),  # Web search (default)
+            YFinanceTools(),  # Stock/Finance data
+            WikipediaTools(),  # Wikipedia search
+            ArxivTools(),  # Academic papers
+            CalculatorTools(),  # Math calculations
+            Newspaper4kTools(),  # News article extraction
+            ReasoningTools(),  # Logical reasoning
+            YouTubeTools(),  # YouTube search
+        ]
+
     def create_agent(
         self,
         model: str = None,
@@ -40,7 +60,10 @@ class AgentService:
         temperature = (
             temperature if temperature is not None else settings.default_temperature
         )
-        system_prompt = system_prompt or "You are a helpful AI assistant."
+        system_prompt = (
+            system_prompt
+            or "You are a helpful AI assistant with access to various tools including web search, Wikipedia, academic papers (Arxiv), finance data, news articles, YouTube, and calculation capabilities. Use these tools when appropriate to provide accurate and helpful responses."
+        )
 
         # Determine model provider
         if model.startswith("nvidia/"):
@@ -61,7 +84,7 @@ class AgentService:
                 max_results=5,
             ),
             add_datetime_to_context=True,
-            tools=[DuckDuckGoTools(), YFinanceTools()],
+            tools=self.tools,
         )
 
         return agent
