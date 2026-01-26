@@ -209,9 +209,73 @@ export const healthAPI = {
   },
 };
 
+// ============ Evals API ============
+
+export const evalsAPI = {
+  // Dashboard endpoints - fetches ALL data (no day filter)
+  getSummary: () => fetchAPI('/evals/dashboard/summary'),
+  
+  getStats: () => fetchAPI('/evals/dashboard/stats'),
+  
+  getHistory: () => fetchAPI('/evals/dashboard/history'),
+  
+  getToolUsage: () => fetchAPI('/evals/dashboard/tool-usage'),
+  
+  // Results
+  getResults: (params = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.evalType) searchParams.append('eval_type', params.evalType);
+    if (params.modelId) searchParams.append('model_id', params.modelId);
+    if (params.limit) searchParams.append('limit', params.limit);
+    if (params.offset) searchParams.append('offset', params.offset);
+    return fetchAPI(`/evals/results?${searchParams}`);
+  },
+  
+  getResult: (resultId) => fetchAPI(`/evals/results/${resultId}`),
+  
+  // Run evaluations
+  runEval: (evalData) => fetchAPI('/evals/run', {
+    method: 'POST',
+    body: JSON.stringify(evalData),
+  }),
+  
+  runBenchmark: (benchmarkId) => fetchAPI(`/evals/run-benchmark/${benchmarkId}`, {
+    method: 'POST',
+  }),
+  
+  // Quick tests
+  quickAccuracyTest: (inputText, expectedOutput, modelId = null) => 
+    fetchAPI(`/evals/quick-test/accuracy?input_text=${encodeURIComponent(inputText)}&expected_output=${encodeURIComponent(expectedOutput)}${modelId ? `&model_id=${modelId}` : ''}`, {
+      method: 'POST',
+    }),
+  
+  quickPerformanceTest: (inputText, modelId = null) =>
+    fetchAPI(`/evals/quick-test/performance?input_text=${encodeURIComponent(inputText)}${modelId ? `&model_id=${modelId}` : ''}`, {
+      method: 'POST',
+    }),
+  
+  // Benchmarks
+  getBenchmarks: (evalType = null, activeOnly = true) => {
+    const params = new URLSearchParams();
+    if (evalType) params.append('eval_type', evalType);
+    params.append('active_only', activeOnly);
+    return fetchAPI(`/evals/benchmarks?${params}`);
+  },
+  
+  createBenchmark: (benchmarkData) => fetchAPI('/evals/benchmarks', {
+    method: 'POST',
+    body: JSON.stringify(benchmarkData),
+  }),
+  
+  deleteBenchmark: (benchmarkId) => fetchAPI(`/evals/benchmarks/${benchmarkId}`, {
+    method: 'DELETE',
+  }),
+};
+
 export default {
   chat: chatAPI,
   documents: documentsAPI,
   settings: settingsAPI,
   health: healthAPI,
+  evals: evalsAPI,
 };

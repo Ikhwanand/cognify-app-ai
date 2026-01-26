@@ -21,3 +21,7 @@ arxiv
 newspaper4k
 youtube-transcript-api
 lxml_html_clean
+
+# Evaluation dependencies
+psutil
+memory_profiler

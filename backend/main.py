@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database import init_db
-from routers import chat, documents, settings
+from routers import chat, documents, settings, evals
 from config import settings as app_settings
 
 
@@ -37,6 +37,7 @@ app.add_middleware(
 app.include_router(chat.router)
 app.include_router(documents.router)
 app.include_router(settings.router)
+app.include_router(evals.router)
 
 
 @app.get("/")

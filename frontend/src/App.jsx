@@ -3,6 +3,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { ChatArea } from '@/components/ChatArea'
 import { Header } from '@/components/Header'
 import { SettingsModal, defaultSettings } from '@/components/SettingsModal'
+import EvalDashboard from '@/components/EvalDashboard'
 import { chatAPI, documentsAPI, settingsAPI, healthAPI } from '@/services/api'
 
 // Helper to get/set localStorage
@@ -36,6 +37,9 @@ function App() {
   // Settings state
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState(defaultSettings)
+  
+  // Dashboard view state
+  const [showDashboard, setShowDashboard] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
 
   // Persist selectedChatId to localStorage
@@ -480,17 +484,23 @@ function App() {
           onToggleDarkMode={toggleDarkMode}
           currentChatTitle={getCurrentChatTitle()}
           isBackendOnline={isBackendOnline}
+          onOpenDashboard={() => setShowDashboard(true)}
+          showDashboard={showDashboard}
         />
         
-        <ChatArea
-          messages={messages}
-          streamingMessage={streamingMessage}
-          onSendMessage={handleSendMessage}
-          onStopStreaming={handleStopStreaming}
-          isLoading={isLoading}
-          isStreaming={isStreaming}
-          className="flex-1"
-        />
+        {showDashboard ? (
+          <EvalDashboard onBack={() => setShowDashboard(false)} />
+        ) : (
+          <ChatArea
+            messages={messages}
+            streamingMessage={streamingMessage}
+            onSendMessage={handleSendMessage}
+            onStopStreaming={handleStopStreaming}
+            isLoading={isLoading}
+            isStreaming={isStreaming}
+            className="flex-1"
+          />
+        )}
       </div>
 
       {/* Settings Modal */}

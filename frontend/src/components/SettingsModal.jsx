@@ -159,10 +159,10 @@ const SettingsModal = ({
                     </SelectGroup>
                     <SelectGroup>
                       <SelectLabel>Nvidia NIM</SelectLabel>
-                      <SelectItem value="nvidia/meta/llama-3.1-405b-instruct">Llama 3.1 405B</SelectItem>
-                      <SelectItem value="nvidia/meta/llama-3.1-70b-instruct">Llama 3.1 70B</SelectItem>
-                      <SelectItem value="nvidia/mistralai/mixtral-8x22b-instruct-v0.1">Mixtral 8x22B</SelectItem>
-                      <SelectItem value="nvidia/nvidia/nemotron-4-340b-reward">Nemotron 4 340B</SelectItem>
+                      <SelectItem value="nvidia/openai/gpt-oss-120b">GPT OSS 120B</SelectItem>
+                      <SelectItem value="nvidia/qwen/qwen3-next-80b-a3b-instruct">Qwen 3 Next 80B</SelectItem>
+                      <SelectItem value="nvidia/minimaxai/minimax-m2">Minimax M2</SelectItem>
+                      <SelectItem value="nvidia/nemotron-3-nano-30b-a3b">Nemotron 3 Nano 30B</SelectItem>
                       <SelectItem value="nvidia/moonshotai/kimi-k2-thinking">Kimi K2 Thinking</SelectItem>
                       <SelectItem value="nvidia/deepseek-ai/deepseek-v3.2">DeepSeek V3.2</SelectItem>
                     </SelectGroup>

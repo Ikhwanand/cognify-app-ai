@@ -1,13 +1,15 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Moon, Sun, Sparkles, Github, Wifi, WifiOff, MessagesSquare } from "lucide-react"
+import { Moon, Sun, Sparkles, Github, Wifi, WifiOff, MessagesSquare, BarChart3 } from "lucide-react"
 
 const Header = ({ 
   darkMode, 
   onToggleDarkMode, 
   currentChatTitle,
   isBackendOnline = false,
+  onOpenDashboard,
+  showDashboard = false,
   className 
 }) => {
   return (
@@ -17,7 +19,12 @@ const Header = ({
     )}>
       {/* Left side - Current chat info */}
       <div className="flex items-center gap-3">
-        {currentChatTitle ? (
+        {showDashboard ? (
+          <>
+            <BarChart3 className="h-5 w-5 text-purple-500" />
+            <h1 className="font-medium text-sm">Evaluation Dashboard</h1>
+          </>
+        ) : currentChatTitle ? (
           <>
             <MessagesSquare className="h-5 w-5 text-primary" />
             <h1 className="font-medium text-sm truncate max-w-[300px]">
@@ -50,6 +57,19 @@ const Header = ({
             </>
           )}
         </div>
+
+        {/* Dashboard button */}
+        {!showDashboard && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenDashboard}
+            className="h-9 gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <BarChart3 className="h-4 w-4" />
+            <span className="hidden sm:inline">Dashboard</span>
+          </Button>
+        )}
 
         {/* GitHub link */}
         <Button

@@ -8,6 +8,7 @@ from agno.knowledge import Knowledge
 from config import settings
 from typing import Optional, List, Dict
 import os
+import time
 
 # Import tools - No API key required
 from agno.tools.websearch import WebSearchTools
@@ -106,6 +107,67 @@ User question: {message}
 Please answer the question based on the context provided. If the context doesn't contain relevant information, say so."""
         return message
 
+    def _track_metrics(
+        self,
+        model_id: str,
+        input_text: str,
+        output_text: str,
+        latency_ms: float,
+        run_metrics: dict = None,
+        tools_used: List[str] = None,
+    ):
+        """Track agent run metrics to the evaluation database"""
+        try:
+            from database import engine
+            from sqlmodel import Session
+            from models.evaluation import EvalResult
+            import json
+
+            # Extract metrics from run response
+            input_tokens = run_metrics.get("input_tokens", 0) if run_metrics else 0
+            output_tokens = run_metrics.get("output_tokens", 0) if run_metrics else 0
+            total_tokens = (
+                run_metrics.get("total_tokens", input_tokens + output_tokens)
+                if run_metrics
+                else 0
+            )
+            duration = (
+                run_metrics.get("duration", latency_ms / 1000)
+                if run_metrics
+                else latency_ms / 1000
+            )
+            time_to_first_token = (
+                run_metrics.get("time_to_first_token") if run_metrics else None
+            )
+
+            with Session(engine) as db:
+                eval_result = EvalResult(
+                    eval_type="performance",
+                    eval_name="Auto-tracked Chat",
+                    model_id=model_id,
+                    input_text=input_text[:500],  # Truncate for storage
+                    actual_output=output_text[:500] if output_text else None,
+                    latency_ms=latency_ms,
+                    tokens_used=total_tokens if total_tokens > 0 else None,
+                    tool_calls_actual=json.dumps(tools_used) if tools_used else None,
+                    tool_success_rate=100.0 if tools_used else None,
+                    status="completed",
+                    passed=latency_ms < 10000,  # Pass if under 10 seconds
+                    extra_data={
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "duration": duration,
+                        "time_to_first_token": time_to_first_token,
+                    }
+                    if run_metrics
+                    else None,
+                )
+                db.add(eval_result)
+                db.commit()
+        except Exception as e:
+            # Don't fail the chat if metrics tracking fails
+            print(f"Warning: Failed to track metrics: {e}")
+
     async def chat(
         self,
         message: str,
@@ -120,6 +182,8 @@ Please answer the question based on the context provided. If the context doesn't
         temperature = user_settings.get("temperature") if user_settings else None
         system_prompt = user_settings.get("system_prompt") if user_settings else None
 
+        model_id = model or settings.default_model
+
         agent = self.create_agent(
             model=model,
             temperature=temperature,
@@ -129,8 +193,48 @@ Please answer the question based on the context provided. If the context doesn't
 
         enhanced_message = self._build_enhanced_message(message, context)
 
+        # Track start time
+        start_time = time.time()
+
         # Get response
         response = agent.run(enhanced_message)
+
+        # Calculate latency
+        latency_ms = (time.time() - start_time) * 1000
+
+        # Extract metrics from response
+        run_metrics = None
+        tools_used = []
+
+        if hasattr(response, "metrics") and response.metrics:
+            run_metrics = (
+                response.metrics.to_dict()
+                if hasattr(response.metrics, "to_dict")
+                else {}
+            )
+
+        # Detect tools used from messages
+        if hasattr(response, "messages") and response.messages:
+            for msg in response.messages:
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tool_call in msg.tool_calls:
+                        tool_name = (
+                            getattr(tool_call, "function", {}).get("name", "")
+                            if hasattr(tool_call, "function")
+                            else str(tool_call)
+                        )
+                        if tool_name and tool_name not in tools_used:
+                            tools_used.append(tool_name)
+
+        # Track metrics asynchronously
+        self._track_metrics(
+            model_id=model_id,
+            input_text=message,
+            output_text=response.content,
+            latency_ms=latency_ms,
+            run_metrics=run_metrics,
+            tools_used=tools_used if tools_used else None,
+        )
 
         return response.content
 
@@ -149,6 +253,8 @@ Please answer the question based on the context provided. If the context doesn't
         temperature = user_settings.get("temperature") if user_settings else None
         system_prompt = user_settings.get("system_prompt") if user_settings else None
 
+        model_id = model or settings.default_model
+
         agent = self.create_agent(
             model=model,
             temperature=temperature,
@@ -158,14 +264,58 @@ Please answer the question based on the context provided. If the context doesn't
 
         enhanced_message = self._build_enhanced_message(message, context)
 
+        # Track start time
+        start_time = time.time()
+        first_token_time = None
+        full_response = ""
+        tools_used = []
+
         # Stream response using Agno's run method with stream=True
         response_stream = agent.run(enhanced_message, stream=True)
 
         for chunk in response_stream:
             if chunk.content:
+                # Track time to first token
+                if first_token_time is None:
+                    first_token_time = time.time() - start_time
+
+                full_response += chunk.content
                 yield chunk.content
+
+            # Check for tool calls in chunk
+            if hasattr(chunk, "messages") and chunk.messages:
+                for msg in chunk.messages:
+                    if hasattr(msg, "tool_calls") and msg.tool_calls:
+                        for tool_call in msg.tool_calls:
+                            tool_name = (
+                                getattr(tool_call, "function", {}).get("name", "")
+                                if hasattr(tool_call, "function")
+                                else str(tool_call)
+                            )
+                            if tool_name and tool_name not in tools_used:
+                                tools_used.append(tool_name)
+
             # Small yield to allow cancellation check
             await asyncio.sleep(0)
+
+        # Calculate final latency
+        latency_ms = (time.time() - start_time) * 1000
+
+        # Build metrics dict
+        run_metrics = {
+            "duration": latency_ms / 1000,
+            "time_to_first_token": first_token_time,
+        }
+
+        # Track metrics after stream completes
+        self._track_metrics(
+            model_id=model_id,
+            input_text=message,
+            output_text=full_response,
+            latency_ms=latency_ms,
+            run_metrics=run_metrics,
+            tools_used=tools_used if tools_used else None,
+        )
 
 
 agent_service = AgentService()
