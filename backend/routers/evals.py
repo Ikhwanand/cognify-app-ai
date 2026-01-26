@@ -4,7 +4,7 @@ Endpoints for running evaluations and retrieving dashboard data.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session
+from sqlmodel import Session, select
 from typing import Optional, List
 import json
 
@@ -137,6 +137,29 @@ async def get_tool_usage(
 ):
     """Get tool usage distribution for pie chart - ALL data"""
     return eval_service.get_tool_usage(db)
+
+
+# ============ Delete All Data ============
+
+
+@router.delete("/results/all")
+async def delete_all_evaluations(
+    db: Session = Depends(get_db),
+):
+    """Delete ALL evaluation results. Use with caution!"""
+    from sqlmodel import delete
+
+    # Count before delete
+    count = len(db.exec(select(EvalResult)).all())
+
+    # Delete all evaluation results
+    db.exec(delete(EvalResult))
+    db.commit()
+
+    return {
+        "message": f"Successfully deleted {count} evaluation results",
+        "deleted_count": count,
+    }
 
 
 # ============ Benchmarks ============

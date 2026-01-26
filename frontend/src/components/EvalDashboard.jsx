@@ -30,6 +30,7 @@ import {
   RefreshCw,
   X,
   ChevronLeft,
+  Trash2,
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
@@ -83,6 +84,7 @@ export default function EvalDashboard({ onBack }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Fetch dashboard data
   const fetchData = async () => {
@@ -183,14 +185,38 @@ export default function EvalDashboard({ onBack }) {
             <p className="text-muted-foreground">Monitor AI agent performance metrics</p>
           </div>
         </div>
-        <Button 
-          variant="outline" 
-          onClick={fetchData}
-          disabled={refreshing}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            onClick={fetchData}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={async () => {
+              if (window.confirm('Are you sure you want to delete ALL evaluation data? This action cannot be undone.')) {
+                try {
+                  setDeleting(true)
+                  await evalsAPI.deleteAllResults()
+                  await fetchData()
+                } catch (err) {
+                  console.error('Failed to delete data:', err)
+                  alert('Failed to delete data: ' + err.message)
+                } finally {
+                  setDeleting(false)
+                }
+              }
+            }}
+            disabled={deleting}
+            className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+          >
+            <Trash2 className={`h-4 w-4 mr-2 ${deleting ? 'animate-pulse' : ''}`} />
+            {deleting ? 'Deleting...' : 'Clear Data'}
+          </Button>
+        </div>
       </div>
 
       {/* Dashboard Content */}

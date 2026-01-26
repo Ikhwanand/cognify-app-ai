@@ -233,6 +233,11 @@ export const evalsAPI = {
   
   getResult: (resultId) => fetchAPI(`/evals/results/${resultId}`),
   
+  // Delete all evaluation data
+  deleteAllResults: () => fetchAPI('/evals/results/all', {
+    method: 'DELETE',
+  }),
+  
   // Run evaluations
   runEval: (evalData) => fetchAPI('/evals/run', {
     method: 'POST',
