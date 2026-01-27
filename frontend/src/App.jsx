@@ -4,6 +4,8 @@ import { ChatArea } from '@/components/ChatArea'
 import { Header } from '@/components/Header'
 import { SettingsModal, defaultSettings } from '@/components/SettingsModal'
 import EvalDashboard from '@/components/EvalDashboard'
+import MCPManager from '@/components/MCPManager'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import { chatAPI, documentsAPI, settingsAPI, healthAPI } from '@/services/api'
 
 // Helper to get/set localStorage
@@ -40,6 +42,7 @@ function App() {
   
   // Dashboard view state
   const [showDashboard, setShowDashboard] = useState(false)
+  const [showMCP, setShowMCP] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
 
   // Persist selectedChatId to localStorage
@@ -241,12 +244,66 @@ function App() {
     }
   }, [])
 
-  const handleSendMessage = useCallback(async (content) => {
+  const handleSendMessage = useCallback(async (content, files = null, options = {}) => {
+    // Handle error messages (e.g., model doesn't support multimodal)
+    if (options.error) {
+      // Add user message
+      const userMessage = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content,
+        timestamp: new Date().toISOString()
+      }
+      setMessages(prev => [...prev, userMessage])
+      
+      // Add error response
+      const errorMessage = {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: options.errorMessage,
+        timestamp: new Date().toISOString()
+      }
+      setMessages(prev => [...prev, errorMessage])
+      return
+    }
+
+    // Create attachments data for display and backend
+    let attachments = null
+    let filesForBackend = null
+    
+    if (files && files.length > 0) {
+      // Convert files to base64 for backend
+      filesForBackend = await Promise.all(files.map(async (file) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => {
+            resolve({
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              data: reader.result.split(',')[1] // Get base64 part only
+            })
+          }
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
+      }))
+      
+      // Also create URLs for display in UI
+      attachments = files.map((file) => ({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        url: URL.createObjectURL(file)
+      }))
+    }
+
     // Add user message immediately for responsiveness
     const userMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
       content,
+      attachments,
       timestamp: new Date().toISOString()
     }
     setMessages(prev => [...prev, userMessage])
@@ -274,6 +331,7 @@ function App() {
         selectedChatId,
         settings.top_k ?? settings.topK ?? 5,
         settings.include_sources ?? settings.includeSources ?? true,
+        filesForBackend, // Pass files for multimodal processing
         // onChunk
         (data) => {
           if (data.type === 'session_id' && data.session_id) {
@@ -484,12 +542,18 @@ function App() {
           onToggleDarkMode={toggleDarkMode}
           currentChatTitle={getCurrentChatTitle()}
           isBackendOnline={isBackendOnline}
-          onOpenDashboard={() => setShowDashboard(true)}
+          onOpenDashboard={() => { setShowDashboard(true); setShowMCP(false); }}
+          onOpenMCP={() => { setShowMCP(true); setShowDashboard(false); }}
           showDashboard={showDashboard}
+          showMCP={showMCP}
         />
         
         {showDashboard ? (
           <EvalDashboard onBack={() => setShowDashboard(false)} />
+        ) : showMCP ? (
+          <ErrorBoundary>
+            <MCPManager onBack={() => setShowMCP(false)} />
+          </ErrorBoundary>
         ) : (
           <ChatArea
             messages={messages}

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Moon, Sun, Sparkles, Github, Wifi, WifiOff, MessagesSquare, BarChart3 } from "lucide-react"
+import { Moon, Sun, Sparkles, Github, Wifi, WifiOff, MessagesSquare, BarChart3, Zap } from "lucide-react"
 
 const Header = ({ 
   darkMode, 
@@ -9,7 +9,9 @@ const Header = ({
   currentChatTitle,
   isBackendOnline = false,
   onOpenDashboard,
+  onOpenMCP,
   showDashboard = false,
+  showMCP = false,
   className 
 }) => {
   return (
@@ -23,6 +25,11 @@ const Header = ({
           <>
             <BarChart3 className="h-5 w-5 text-purple-500" />
             <h1 className="font-medium text-sm">Evaluation Dashboard</h1>
+          </>
+        ) : showMCP ? (
+          <>
+            <Zap className="h-5 w-5 text-purple-500" />
+            <h1 className="font-medium text-sm">MCP Servers</h1>
           </>
         ) : currentChatTitle ? (
           <>
@@ -57,6 +64,19 @@ const Header = ({
             </>
           )}
         </div>
+
+        {/* MCP button */}
+        {!showMCP && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenMCP}
+            className="h-9 gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <Zap className="h-4 w-4" />
+            <span className="hidden sm:inline">MCP</span>
+          </Button>
+        )}
 
         {/* Dashboard button */}
         {!showDashboard && (
@@ -106,4 +126,3 @@ const Header = ({
 }
 
 export { Header }
-

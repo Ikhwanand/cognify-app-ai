@@ -20,6 +20,14 @@ from agno.tools.newspaper4k import Newspaper4kTools
 from agno.tools.reasoning import ReasoningTools
 from agno.tools.youtube import YouTubeTools
 
+# Import MCP service for dynamic MCP tools
+from services.mcp_service import mcp_service
+
+# Import Agno media classes
+from agno.media import Image, Audio, Video, File
+import base64
+from schemas.chat import FileAttachment
+
 os.environ["GROQ_API_KEY"] = settings.groq_api_key
 os.environ["NVIDIA_API_KEY"] = settings.nvidia_api_key
 
@@ -36,8 +44,8 @@ class AgentService:
             search_type=SearchType.hybrid,
         )
 
-        # Initialize all available tools
-        self.tools = [
+        # Initialize all available built-in tools
+        self.builtin_tools = [
             WebSearchTools(),  # Web search (default)
             YFinanceTools(),  # Stock/Finance data
             WikipediaTools(),  # Wikipedia search
@@ -48,22 +56,49 @@ class AgentService:
             YouTubeTools(),  # YouTube search
         ]
 
+    def get_all_tools(self) -> List:
+        """Get all available tools including built-in and active MCP tools"""
+        all_tools = list(self.builtin_tools)
+
+        # Add active MCP tools
+        mcp_tools = mcp_service.get_mcp_tools_for_agent()
+        all_tools.extend(mcp_tools)
+
+        return all_tools
+
     def create_agent(
         self,
         model: str = None,
         temperature: float = None,
         system_prompt: str = None,
         session_id: str = None,
+        include_mcp_tools: bool = True,
     ) -> Agent:
-        """Create an Agno agent with specified settings"""
+        """Create an Agno agent with specified settings
+
+        Args:
+            model: Model ID to use
+            temperature: Temperature setting for the model
+            system_prompt: Custom system prompt
+            session_id: Session ID for conversation continuity
+            include_mcp_tools: Whether to include active MCP tools (default: True)
+        """
 
         model = model or settings.default_model
         temperature = (
             temperature if temperature is not None else settings.default_temperature
         )
+
+        # Build system prompt based on available tools
+        mcp_info = ""
+        if include_mcp_tools:
+            mcp_tools = mcp_service.get_mcp_tools_for_agent()
+            if mcp_tools:
+                mcp_info = " You also have access to external MCP tools for additional capabilities."
+
         system_prompt = (
             system_prompt
-            or "You are a helpful AI assistant with access to various tools including web search, Wikipedia, academic papers (Arxiv), finance data, news articles, YouTube, and calculation capabilities. Use these tools when appropriate to provide accurate and helpful responses."
+            or f"You are a helpful AI assistant with access to various tools including web search, Wikipedia, academic papers (Arxiv), finance data, news articles, YouTube, and calculation capabilities.{mcp_info} Use these tools when appropriate to provide accurate and helpful responses."
         )
 
         # Determine model provider
@@ -72,6 +107,9 @@ class AgentService:
             model_provider = Nvidia(id=actual_model, temperature=temperature)
         else:
             model_provider = Groq(id=model, temperature=temperature)
+
+        # Get tools based on settings
+        tools = self.get_all_tools() if include_mcp_tools else list(self.builtin_tools)
 
         agent = Agent(
             model=model_provider,
@@ -85,7 +123,7 @@ class AgentService:
                 max_results=5,
             ),
             add_datetime_to_context=True,
-            tools=self.tools,
+            tools=tools,
         )
 
         return agent
@@ -174,6 +212,7 @@ Please answer the question based on the context provided. If the context doesn't
         session_id: Optional[str] = None,
         context: Optional[List[str]] = None,
         user_settings: Optional[Dict] = None,
+        files: Optional[List[FileAttachment]] = None,
     ) -> str:
         """Send a message and get a response (non-streaming)"""
 
@@ -196,8 +235,85 @@ Please answer the question based on the context provided. If the context doesn't
         # Track start time
         start_time = time.time()
 
-        # Get response
-        response = agent.run(enhanced_message)
+        # Process multimodal files
+        images = []
+        audio = []
+        videos = []
+        files_data = []
+
+        if files:
+            for file in files:
+                try:
+                    file_content = base64.b64decode(file.data)
+
+                    # 1. Handle Images
+                    if file.type.startswith("image/"):
+                        images.append(Image(content=file_content))
+
+                    # 2. Handle Audio
+                    elif file.type.startswith("audio/"):
+                        audio.append(Audio(content=file_content))
+
+                    # 3. Handle Video
+                    elif file.type.startswith("video/"):
+                        videos.append(Video(content=file_content))
+
+                    # 4. Handle Text Files
+                    elif file.type.startswith("text/") or file.name.endswith(
+                        (".txt", ".md", ".json", ".csv", ".py", ".js", ".html")
+                    ):
+                        try:
+                            text = file_content.decode("utf-8")
+                            enhanced_message += f"\n\n--- Content of {file.name} ---\n{text}\n--- End of {file.name} ---\n"
+                        except:
+                            files_data.append(
+                                File(content=file_content, file_name=file.name)
+                            )
+
+                    # 5. Handle PDFs
+                    elif file.type == "application/pdf" or file.name.endswith(".pdf"):
+                        try:
+                            import io
+                            from pypdf import PdfReader
+
+                            pdf_file = io.BytesIO(file_content)
+                            reader = PdfReader(pdf_file)
+                            text = ""
+                            for page in reader.pages:
+                                text += page.extract_text() + "\n"
+
+                            enhanced_message += f"\n\n--- Content of {file.name} (PDF) ---\n{text}\n--- End of {file.name} ---\n"
+                        except ImportError:
+                            files_data.append(
+                                File(content=file_content, file_name=file.name)
+                            )
+                        except Exception:
+                            files_data.append(
+                                File(content=file_content, file_name=file.name)
+                            )
+
+                    # 6. Fallback
+                    else:
+                        files_data.append(
+                            File(content=file_content, file_name=file.name)
+                        )
+
+                except Exception as e:
+                    print(f"Error processing file {file.name}: {e}")
+
+        # Get response - pass all media types
+        # Note: Not all models support all media types. We pass what we have.
+        kwargs = {}
+        if images:
+            kwargs["images"] = images
+        if audio:
+            kwargs["audio"] = audio
+        if videos:
+            kwargs["videos"] = videos
+        if files_data:
+            kwargs["files"] = files_data
+
+        response = await agent.arun(enhanced_message, **kwargs)
 
         # Calculate latency
         latency_ms = (time.time() - start_time) * 1000
@@ -244,6 +360,7 @@ Please answer the question based on the context provided. If the context doesn't
         session_id: Optional[str] = None,
         context: Optional[List[str]] = None,
         user_settings: Optional[Dict] = None,
+        files: Optional[List[FileAttachment]] = None,
     ):
         """Send a message and stream the response"""
         import asyncio
@@ -270,10 +387,87 @@ Please answer the question based on the context provided. If the context doesn't
         full_response = ""
         tools_used = []
 
-        # Stream response using Agno's run method with stream=True
-        response_stream = agent.run(enhanced_message, stream=True)
+        # Process multimodal files
+        images = []
+        audio = []
+        videos = []
+        files_data = []
 
-        for chunk in response_stream:
+        if files:
+            for file in files:
+                try:
+                    file_content = base64.b64decode(file.data)
+
+                    # 1. Handle Images
+                    if file.type.startswith("image/"):
+                        images.append(Image(content=file_content))
+
+                    # 2. Handle Audio
+                    elif file.type.startswith("audio/"):
+                        audio.append(Audio(content=file_content))
+
+                    # 3. Handle Video
+                    elif file.type.startswith("video/"):
+                        videos.append(Video(content=file_content))
+
+                    # 4. Handle Text Files
+                    elif file.type.startswith("text/") or file.name.endswith(
+                        (".txt", ".md", ".json", ".csv", ".py", ".js", ".html")
+                    ):
+                        try:
+                            text = file_content.decode("utf-8")
+                            enhanced_message += f"\n\n--- Content of {file.name} ---\n{text}\n--- End of {file.name} ---\n"
+                        except Exception:
+                            files_data.append(
+                                File(content=file_content, file_name=file.name)
+                            )
+
+                    # 5. Handle PDFs
+                    elif file.type == "application/pdf" or file.name.endswith(".pdf"):
+                        try:
+                            import io
+                            from pypdf import PdfReader
+
+                            pdf_file = io.BytesIO(file_content)
+                            reader = PdfReader(pdf_file)
+                            text = ""
+                            for page in reader.pages:
+                                text += page.extract_text() + "\n"
+
+                            enhanced_message += f"\n\n--- Content of {file.name} (PDF) ---\n{text}\n--- End of {file.name} ---\n"
+                        except ImportError:
+                            files_data.append(
+                                File(content=file_content, file_name=file.name)
+                            )
+                        except Exception:
+                            files_data.append(
+                                File(content=file_content, file_name=file.name)
+                            )
+
+                    # 6. Fallback
+                    else:
+                        files_data.append(
+                            File(content=file_content, file_name=file.name)
+                        )
+
+                except Exception as e:
+                    print(f"Error processing file {file.name}: {e}")
+
+        # Construct kwargs for arun
+        kwargs = {"stream": True}
+        if images:
+            kwargs["images"] = images
+        if audio:
+            kwargs["audio"] = audio
+        if videos:
+            kwargs["videos"] = videos
+        if files_data:
+            kwargs["files"] = files_data
+
+        # Stream response using Agno's arun method
+        response_stream = agent.arun(enhanced_message, **kwargs)
+
+        async for chunk in response_stream:
             if chunk.content:
                 # Track time to first token
                 if first_token_time is None:

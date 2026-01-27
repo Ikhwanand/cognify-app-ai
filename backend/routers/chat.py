@@ -101,6 +101,7 @@ async def send_message(
         session_id=session_id,
         context=contexts if contexts else None,
         user_settings=_user_settings.model_dump(),
+        files=message.files,
     )
 
     # Save assistant message
@@ -171,6 +172,7 @@ async def send_message_stream(
                 session_id=session_id,
                 context=contexts if contexts else None,
                 user_settings=_user_settings.model_dump(),
+                files=message.files,
             ):
                 # Check if cancelled
                 if not active_streams.get(stream_id, False):
@@ -186,7 +188,17 @@ async def send_message_stream(
                 yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
 
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            error_msg = str(e)
+            # Check for common multimodal errors (provider rejects complex content)
+            if (
+                "content must be a string" in error_msg
+                or "content" in error_msg
+                and "string" in error_msg
+            ):
+                friendly_error = "⚠️ Model Error: Model yang dipilih tidak mendukung gambar (Multimodal). Silakan ganti ke model Vision (contoh: Llama-3.2 Vision, GPT-4o, Qwen-VL) di Settings."
+                yield f"data: {json.dumps({'type': 'error', 'error': friendly_error})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'error', 'error': error_msg})}\n\n"
             return
         finally:
             # Remove from active streams

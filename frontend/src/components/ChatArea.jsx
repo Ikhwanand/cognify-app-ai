@@ -3,10 +3,80 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, User, Loader2, Sparkles, Square } from "lucide-react"
+import { Send, User, Loader2, Sparkles, Square, Plus, X, FileText, Image as ImageIcon, File } from "lucide-react"
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+
+// File preview component
+const FilePreview = ({ file, onRemove }) => {
+  const [preview, setPreview] = React.useState(null);
+  const isImage = file.type.startsWith('image/');
+
+  React.useEffect(() => {
+    if (isImage) {
+      const reader = new FileReader();
+      reader.onload = (e) => setPreview(e.target.result);
+      reader.readAsDataURL(file);
+    }
+  }, [file, isImage]);
+
+  const getFileIcon = () => {
+    if (isImage) return <ImageIcon className="w-4 h-4" />;
+    if (file.type.includes('pdf')) return <FileText className="w-4 h-4" />;
+    return <File className="w-4 h-4" />;
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  return (
+    <div className="relative group">
+      <div className="flex items-center gap-2 p-2 bg-gray-700/50 rounded-lg border border-gray-600/50">
+        {isImage && preview ? (
+          <img src={preview} alt={file.name} className="w-12 h-12 object-cover rounded" />
+        ) : (
+          <div className="w-12 h-12 bg-gray-600/50 rounded flex items-center justify-center">
+            {getFileIcon()}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-white truncate">{file.name}</p>
+          <p className="text-xs text-gray-400">{formatSize(file.size)}</p>
+        </div>
+        <button
+          onClick={onRemove}
+          className="absolute -top-2 -right-2 p-1 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Attachment display in message
+const MessageAttachment = ({ attachment }) => {
+  const isImage = attachment.type?.startsWith('image/') || attachment.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+  
+  if (isImage && attachment.url) {
+    return (
+      <div className="mt-2 rounded-lg overflow-hidden max-w-sm">
+        <img src={attachment.url} alt={attachment.name || 'Attachment'} className="w-full h-auto" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-2 p-2 bg-black/10 dark:bg-white/10 rounded-lg">
+      <FileText className="w-4 h-4" />
+      <span className="text-sm">{attachment.name || 'File'}</span>
+    </div>
+  );
+};
 
 const ChatMessage = ({ message, isUser, isStreaming = false }) => {
   return (
@@ -37,6 +107,15 @@ const ChatMessage = ({ message, isUser, isStreaming = false }) => {
           ? "bg-primary text-primary-foreground rounded-tr-sm" 
           : "bg-muted text-foreground rounded-tl-sm"
       )}>
+        {/* Attachments */}
+        {message.attachments && message.attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {message.attachments.map((att, i) => (
+              <MessageAttachment key={i} attachment={att} />
+            ))}
+          </div>
+        )}
+        
         <div className={cn(
           "text-sm prose dark:prose-invert max-w-none break-words",
           isUser && "prose-p:text-primary-foreground prose-headings:text-primary-foreground prose-strong:text-primary-foreground prose-ul:text-primary-foreground prose-ol:text-primary-foreground"
@@ -138,8 +217,10 @@ const ChatArea = ({
   className 
 }) => {
   const [input, setInput] = React.useState("")
+  const [attachedFiles, setAttachedFiles] = React.useState([])
   const scrollRef = React.useRef(null)
   const textareaRef = React.useRef(null)
+  const fileInputRef = React.useRef(null)
 
   // Auto-scroll to bottom when new messages arrive or streaming updates
   React.useEffect(() => {
@@ -150,8 +231,10 @@ const ChatArea = ({
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (input.trim() && !isLoading && !isStreaming) {
-      onSendMessage(input.trim())
+    if ((input.trim() || attachedFiles.length > 0) && !isLoading && !isStreaming) {
+      // Always allow file uploads - backend will handle or return error if needed
+      onSendMessage(input.trim(), attachedFiles.length > 0 ? attachedFiles : null)
+      setAttachedFiles([])
       setInput("")
       // Reset textarea height
       if (textareaRef.current) {
@@ -179,6 +262,19 @@ const ChatArea = ({
     const textarea = e.target
     textarea.style.height = 'auto'
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px'
+  }
+
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
+    // Limit to 5 files max
+    const newFiles = [...attachedFiles, ...files].slice(0, 5);
+    setAttachedFiles(newFiles);
+    // Reset input
+    e.target.value = '';
+  }
+
+  const handleRemoveFile = (index) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
   }
 
   const allMessages = streamingMessage 
@@ -227,14 +323,48 @@ const ChatArea = ({
       {/* Input Area */}
       <div className="border-t border-border p-4 bg-background/80 backdrop-blur-sm">
         <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
+          {/* File previews */}
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {attachedFiles.map((file, index) => (
+                <FilePreview 
+                  key={index} 
+                  file={file} 
+                  onRemove={() => handleRemoveFile(index)} 
+                />
+              ))}
+            </div>
+          )}
+          
           <div className="relative flex items-end gap-2 bg-muted rounded-2xl p-2">
+            {/* File upload button */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.txt,.md,.doc,.docx"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading || isStreaming}
+              className="h-10 w-10 rounded-xl shrink-0 text-muted-foreground hover:text-foreground"
+              title="Attach files (images, PDFs, documents)"
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
+
             <Textarea
               ref={textareaRef}
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask a question about your documents..."
-              className="flex-1 min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 py-3 px-4"
+              placeholder={attachedFiles.length > 0 ? "Add a message about your files..." : "Ask a question about your documents..."}
+              className="flex-1 min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 py-3 px-2"
               rows={1}
               disabled={isLoading || isStreaming}
             />
@@ -252,7 +382,7 @@ const ChatArea = ({
               <Button
                 type="submit"
                 size="icon"
-                disabled={!input.trim() || isLoading}
+                disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
                 className="h-10 w-10 rounded-xl shrink-0"
               >
                 {isLoading ? (

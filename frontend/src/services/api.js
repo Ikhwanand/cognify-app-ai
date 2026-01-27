@@ -24,7 +24,23 @@ async function fetchAPI(endpoint, options = {}) {
     throw new Error(error.detail || `HTTP error! status: ${response.status}`);
   }
 
-  return response.json();
+  // Handle 204 No Content
+  if (response.status === 204) {
+    return { success: true };
+  }
+
+  // Try to parse as JSON, if empty or not JSON return success object
+  const text = await response.text();
+  if (!text || text.trim() === '') {
+    return { success: true };
+  }
+  
+  try {
+    return JSON.parse(text);
+  } catch {
+    // If not valid JSON, return success
+    return { success: true };
+  }
 }
 
 // ============ Chat API ============
@@ -43,7 +59,7 @@ export const chatAPI = {
   deleteSession: (sessionId) => fetchAPI(`/chat/sessions/${sessionId}`, { method: 'DELETE' }),
 
   // Send a message and get AI response (non-streaming)
-  sendMessage: (content, sessionId = null, topK = 5, includeSources = true) => {
+  sendMessage: (content, sessionId = null, topK = 5, includeSources = true, files = null) => {
     const params = new URLSearchParams({
       top_k: topK.toString(),
       include_sources: includeSources.toString(),
@@ -54,12 +70,13 @@ export const chatAPI = {
       body: JSON.stringify({
         content,
         session_id: sessionId,
+        files: files, // Array of {name, type, size, data} objects
       }),
     });
   },
 
   // Send a message with streaming response
-  sendMessageStream: (content, sessionId = null, topK = 5, includeSources = true, onChunk, onDone, onError) => {
+  sendMessageStream: (content, sessionId = null, topK = 5, includeSources = true, files = null, onChunk, onDone, onError) => {
     const params = new URLSearchParams({
       top_k: topK.toString(),
       include_sources: includeSources.toString(),
@@ -78,6 +95,7 @@ export const chatAPI = {
           body: JSON.stringify({
             content,
             session_id: sessionId,
+            files: files, // Array of {name, type, size, data} objects
           }),
           signal: abortController.signal,
         });
@@ -277,10 +295,63 @@ export const evalsAPI = {
   }),
 };
 
+// ============ MCP API ============
+
+export const mcpAPI = {
+  // Get all MCP servers
+  getServers: (enabledOnly = false) => 
+    fetchAPI(`/mcp/servers?enabled_only=${enabledOnly}`),
+  
+  // Get a single server by ID
+  getServer: (serverId) => fetchAPI(`/mcp/servers/${serverId}`),
+  
+  // Create a new MCP server
+  createServer: (serverData) => fetchAPI('/mcp/servers', {
+    method: 'POST',
+    body: JSON.stringify(serverData),
+  }),
+  
+  // Update an MCP server
+  updateServer: (serverId, updateData) => fetchAPI(`/mcp/servers/${serverId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updateData),
+  }),
+  
+  // Delete an MCP server
+  deleteServer: (serverId) => fetchAPI(`/mcp/servers/${serverId}`, {
+    method: 'DELETE',
+  }),
+  
+  // Test connection to an MCP server
+  testConnection: (serverId) => fetchAPI(`/mcp/servers/${serverId}/test`, {
+    method: 'POST',
+  }),
+  
+  // Connect to an MCP server
+  connectServer: (serverId) => fetchAPI(`/mcp/servers/${serverId}/connect`, {
+    method: 'POST',
+  }),
+  
+  // Disconnect from an MCP server
+  disconnectServer: (serverId) => fetchAPI(`/mcp/servers/${serverId}/disconnect`, {
+    method: 'POST',
+  }),
+  
+  // Get list of active connection IDs
+  getActiveConnections: () => fetchAPI('/mcp/active'),
+  
+  // Get MCP statistics
+  getStats: () => fetchAPI('/mcp/stats'),
+  
+  // Get preset server templates
+  getPresets: () => fetchAPI('/mcp/presets'),
+};
+
 export default {
   chat: chatAPI,
   documents: documentsAPI,
   settings: settingsAPI,
   health: healthAPI,
   evals: evalsAPI,
+  mcp: mcpAPI,
 };
