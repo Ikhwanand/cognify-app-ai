@@ -126,6 +126,10 @@ class AgentService:
             tools=tools,
             enable_agentic_memory=True,
             compress_tool_results=True,
+            add_history_to_context=True,
+            add_memories_to_context=True,
+            add_session_summary_to_context=True,
+            num_history_runs=3,
         )
 
         return agent
