@@ -165,6 +165,7 @@ const SettingsModal = ({
                       <SelectItem value="nvidia/nemotron-3-nano-30b-a3b">Nemotron 3 Nano 30B</SelectItem>
                       <SelectItem value="nvidia/moonshotai/kimi-k2-thinking">Kimi K2 Thinking</SelectItem>
                       <SelectItem value="nvidia/deepseek-ai/deepseek-v3.2">DeepSeek V3.2</SelectItem>
+                      <SelectItem value="nvidia/moonshotai/kimi-k2.5">Kimi K2.5</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
