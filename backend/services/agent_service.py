@@ -124,6 +124,8 @@ class AgentService:
             ),
             add_datetime_to_context=True,
             tools=tools,
+            enable_agentic_memory=True,
+            compress_tool_results=True,
         )
 
         return agent
