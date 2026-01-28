@@ -19,6 +19,7 @@ from agno.tools.calculator import CalculatorTools
 from agno.tools.newspaper4k import Newspaper4kTools
 from agno.tools.reasoning import ReasoningTools
 from agno.tools.youtube import YouTubeTools
+from agno.compression.manager import CompressionManager
 
 # Import MCP service for dynamic MCP tools
 from services.mcp_service import mcp_service
@@ -92,13 +93,40 @@ class AgentService:
         # Build system prompt based on available tools
         mcp_info = ""
         if include_mcp_tools:
-            mcp_tools = mcp_service.get_mcp_tools_for_agent()
-            if mcp_tools:
-                mcp_info = " You also have access to external MCP tools for additional capabilities."
+            mcp_tools_info = mcp_service.get_mcp_tools_info()
+            if mcp_tools_info:
+                # Build detailed MCP tools description
+                tools_list = []
+                for tool in mcp_tools_info:
+                    tool_entry = f"- **{tool['name']}**"
+                    if tool.get("description"):
+                        tool_entry += f": {tool['description']}"
+                    if tool.get("server"):
+                        tool_entry += f" (from {tool['server']})"
+                    tools_list.append(tool_entry)
+
+                mcp_info = f"""
+
+You have access to the following MCP (Model Context Protocol) tools that extend your capabilities:
+{chr(10).join(tools_list)}
+
+IMPORTANT: You MUST use these MCP tools when appropriate to fulfill user requests. These tools are fully available and functional. Call them just like any other tool function when the user's request matches their capabilities."""
 
         system_prompt = (
             system_prompt
-            or f"You are a helpful AI assistant with access to various tools including web search, Wikipedia, academic papers (Arxiv), finance data, news articles, YouTube, and calculation capabilities.{mcp_info} Use these tools when appropriate to provide accurate and helpful responses."
+            or f"""You are a helpful AI assistant with access to various tools. Your available tools include:
+
+**Built-in Tools:**
+- Web search for finding information online
+- Wikipedia for encyclopedia lookups
+- Arxiv for academic/research papers
+- YFinance for stock market and financial data
+- News/newspaper article extraction
+- YouTube search
+- Calculator for mathematical computations
+- Reasoning tools for logical analysis{mcp_info}
+
+Use these tools proactively when the user's question would benefit from current data, calculations, or external information. Always explain what tool you're using and why."""
         )
 
         # Determine model provider
@@ -110,6 +138,11 @@ class AgentService:
 
         # Get tools based on settings
         tools = self.get_all_tools() if include_mcp_tools else list(self.builtin_tools)
+
+        # compression_manager = CompressionManager(
+        #     model=model_provider,
+        #     compress_tool_results_limit=5,
+        # )
 
         agent = Agent(
             model=model_provider,
@@ -125,7 +158,7 @@ class AgentService:
             add_datetime_to_context=True,
             tools=tools,
             enable_agentic_memory=True,
-            compress_tool_results=True,
+            # compression_manager=compression_manager,
             add_history_to_context=True,
             add_memories_to_context=True,
             add_session_summary_to_context=True,

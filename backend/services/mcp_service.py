@@ -185,6 +185,7 @@ class MCPService:
     async def connect_server(self, server_id: int) -> bool:
         """Establish a persistent connection to an MCP server"""
         if not MCP_AVAILABLE:
+            print("Warning: MCP is not available")
             return False
 
         if server_id in self._active_connections:
@@ -193,23 +194,38 @@ class MCPService:
         with Session(engine) as session:
             server = session.get(MCPServer, server_id)
             if not server or not server.is_enabled:
+                print(f"Server {server_id} not found or not enabled")
                 return False
 
             try:
                 mcp_tools = self._create_mcp_tools(server)
                 await mcp_tools.connect()
 
+                # Store the connected MCPTools instance
                 self._active_connections[server_id] = mcp_tools
+
+                # Save available tools to database
+                tools_list = []
+                if hasattr(mcp_tools, "functions") and mcp_tools.functions:
+                    for func_name, func in mcp_tools.functions.items():
+                        tool_desc = getattr(func, "description", None) or ""
+                        tools_list.append({"name": func_name, "description": tool_desc})
 
                 server.status = MCPServerStatus.ACTIVE.value
                 server.last_connected_at = datetime.utcnow()
                 server.error_message = None
+                if tools_list:
+                    server.available_tools = json.dumps(tools_list)
                 session.add(server)
                 session.commit()
 
+                print(
+                    f"Successfully connected to MCP server {server.name} with {len(tools_list)} tools"
+                )
                 return True
 
             except Exception as e:
+                print(f"Error connecting to MCP server {server_id}: {e}")
                 server.status = MCPServerStatus.ERROR.value
                 server.error_message = str(e)
                 session.add(server)
@@ -248,8 +264,81 @@ class MCPService:
         return self._active_connections
 
     def get_mcp_tools_for_agent(self) -> List[MCPTools]:
-        """Get list of active MCPTools instances for use with agents"""
-        return list(self._active_connections.values())
+        """Get list of active MCPTools instances for use with agents.
+
+        Only returns MCPTools that have been properly initialized and connected.
+        """
+        active_tools = []
+        for server_id, mcp_tools in self._active_connections.items():
+            # Check if the MCPTools is properly initialized
+            if hasattr(mcp_tools, "_initialized") and mcp_tools._initialized:
+                active_tools.append(mcp_tools)
+            elif hasattr(mcp_tools, "initialized") and mcp_tools.initialized:
+                active_tools.append(mcp_tools)
+            else:
+                # Try to include it anyway if we can't verify
+                active_tools.append(mcp_tools)
+        return active_tools
+
+    def get_mcp_tools_info(self) -> List[Dict]:
+        """Get information about available MCP tools for use in system prompts.
+
+        Returns a list of dicts with tool names and descriptions from all connected MCP servers.
+        """
+        tools_info = []
+
+        # Get info from active connections
+        for server_id, mcp_tools in self._active_connections.items():
+            try:
+                # Get server info from database
+                server = self.get_server(server_id)
+                server_name = server.name if server else f"Server {server_id}"
+
+                # Get functions from MCPTools
+                if hasattr(mcp_tools, "functions") and mcp_tools.functions:
+                    for func_name, func in mcp_tools.functions.items():
+                        tool_desc = (
+                            getattr(func, "description", None)
+                            or f"Tool from {server_name}"
+                        )
+                        tools_info.append(
+                            {
+                                "name": func_name,
+                                "description": tool_desc,
+                                "server": server_name,
+                            }
+                        )
+            except Exception as e:
+                print(f"Warning: Could not get tools info for server {server_id}: {e}")
+
+        # Also get info from database for connected servers
+        for server_id in self._active_connections.keys():
+            try:
+                server = self.get_server(server_id)
+                if server and server.available_tools:
+                    import json
+
+                    try:
+                        db_tools = json.loads(server.available_tools)
+                        for tool in db_tools:
+                            # Check if not already in tools_info
+                            tool_name = tool.get("name", "")
+                            if tool_name and not any(
+                                t["name"] == tool_name for t in tools_info
+                            ):
+                                tools_info.append(
+                                    {
+                                        "name": tool_name,
+                                        "description": tool.get("description", ""),
+                                        "server": server.name,
+                                    }
+                                )
+                    except json.JSONDecodeError:
+                        pass
+            except Exception:
+                pass
+
+        return tools_info
 
     def _create_mcp_tools(self, server: MCPServer) -> MCPTools:
         """Create MCPTools instance from server configuration"""
