@@ -19,7 +19,9 @@ from agno.tools.calculator import CalculatorTools
 from agno.tools.newspaper4k import Newspaper4kTools
 from agno.tools.reasoning import ReasoningTools
 from agno.tools.youtube import YouTubeTools
-from agno.compression.manager import CompressionManager
+
+# from agno.compression.manager import CompressionManager
+from agno.guardrails import PIIDetectionGuardrail, PromptInjectionGuardrail
 
 # Import MCP service for dynamic MCP tools
 from services.mcp_service import mcp_service
@@ -163,6 +165,10 @@ Use these tools proactively when the user's question would benefit from current 
             add_memories_to_context=True,
             add_session_summary_to_context=True,
             num_history_runs=3,
+            pre_hooks=[
+                PIIDetectionGuardrail(),
+                PromptInjectionGuardrail(),
+            ],
         )
 
         return agent
