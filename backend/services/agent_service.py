@@ -166,7 +166,9 @@ Use these tools proactively when the user's question would benefit from current 
             add_session_summary_to_context=True,
             num_history_runs=3,
             pre_hooks=[
-                PIIDetectionGuardrail(),
+                PIIDetectionGuardrail(
+                    mask_pii=True,
+                ),
                 PromptInjectionGuardrail(),
             ],
         )
