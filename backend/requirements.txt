@@ -25,3 +25,4 @@ lxml_html_clean
 # Evaluation dependencies
 psutil
 memory_profiler
+firecrawl-py

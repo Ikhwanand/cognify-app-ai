@@ -19,6 +19,7 @@ from agno.tools.calculator import CalculatorTools
 from agno.tools.newspaper4k import Newspaper4kTools
 from agno.tools.reasoning import ReasoningTools
 from agno.tools.youtube import YouTubeTools
+from agno.tools.firecrawl import FirecrawlTools
 
 # from agno.compression.manager import CompressionManager
 from agno.guardrails import PIIDetectionGuardrail, PromptInjectionGuardrail
@@ -33,6 +34,8 @@ from schemas.chat import FileAttachment
 
 os.environ["GROQ_API_KEY"] = settings.groq_api_key
 os.environ["NVIDIA_API_KEY"] = settings.nvidia_api_key
+os.environ["FIRECRAWL_API_KEY"] = settings.firecrawl_api_key
+os.environ["PROXYCURL_API_KEY"] = settings.proxycurl_api_key
 
 
 class AgentService:
@@ -57,6 +60,7 @@ class AgentService:
             Newspaper4kTools(),  # News article extraction
             ReasoningTools(),  # Logical reasoning
             YouTubeTools(),  # YouTube search
+            FirecrawlTools(all=True),  # Firecrawl tools
         ]
 
     def get_all_tools(self) -> List:
@@ -126,7 +130,12 @@ IMPORTANT: You MUST use these MCP tools when appropriate to fulfill user request
 - News/newspaper article extraction
 - YouTube search
 - Calculator for mathematical computations
-- Reasoning tools for logical analysis{mcp_info}
+- Reasoning tools for logical analysis
+
+**LinkedIn Tools:**
+- get_linkedin_profile: Scrape LinkedIn profile data by URL
+- search_linkedin_person: Find LinkedIn profile URL by name
+- get_company_linkedin_profile: Scrape LinkedIn company data{mcp_info}
 
 Use these tools proactively when the user's question would benefit from current data, calculations, or external information. Always explain what tool you're using and why."""
         )

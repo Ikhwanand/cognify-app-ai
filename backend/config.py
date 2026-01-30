@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     default_temperature: float = os.getenv("DEFAULT_TEMPERATURE", 0.7)
     default_max_tokens: int = os.getenv("DEFAULT_MAX_TOKENS", 2048)
 
+    # Firecrawl Settings
+    firecrawl_api_key: str = os.getenv("FIRECRAWL_API_KEY", "")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
