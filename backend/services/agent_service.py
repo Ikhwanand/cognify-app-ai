@@ -1,6 +1,7 @@
 from agno.agent import Agent
 from agno.models.groq import Groq
 from agno.models.nvidia import Nvidia
+from agno.models.google import Gemini
 from agno.db.postgres import PostgresDb
 from agno.vectordb.pgvector import PgVector, SearchType
 from agno.knowledge.embedder.sentence_transformer import SentenceTransformerEmbedder
@@ -35,7 +36,7 @@ from schemas.chat import FileAttachment
 os.environ["GROQ_API_KEY"] = settings.groq_api_key
 os.environ["NVIDIA_API_KEY"] = settings.nvidia_api_key
 os.environ["FIRECRAWL_API_KEY"] = settings.firecrawl_api_key
-os.environ["PROXYCURL_API_KEY"] = settings.proxycurl_api_key
+os.environ["GOOGLE_API_KEY"] = settings.google_api_key
 
 
 class AgentService:
@@ -144,6 +145,9 @@ Use these tools proactively when the user's question would benefit from current 
         if model.startswith("nvidia/"):
             actual_model = model.replace("nvidia/", "")
             model_provider = Nvidia(id=actual_model, temperature=temperature)
+        elif model.startswith("google/"):
+            actual_model = model.replace("google/", "")
+            model_provider = Gemini(id=actual_model, temperature=temperature)
         else:
             model_provider = Groq(id=model, temperature=temperature)
 
@@ -306,9 +310,36 @@ Please answer the question based on the context provided. If the context doesn't
                     if file.type.startswith("image/"):
                         images.append(Image(content=file_content))
 
-                    # 2. Handle Audio
+                    # 2. Handle Audio (voice notes and audio files)
                     elif file.type.startswith("audio/"):
-                        audio.append(Audio(content=file_content))
+                        # Voice notes from browser are typically audio/webm or audio/mp4
+                        # Most LLM models don't support direct audio input yet
+                        # For now, we add a note about the voice note to the message
+                        is_voice_note = (
+                            getattr(file, "isVoiceNote", False)
+                            or "voice" in file.name.lower()
+                        )
+                        duration = getattr(file, "duration", None)
+
+                        if is_voice_note:
+                            duration_str = f" ({duration}s)" if duration else ""
+                            enhanced_message += f"\n\n[🎤 Voice Note attached: {file.name}{duration_str}. Note: Audio transcription not yet supported. Please describe what you said in text.]\n"
+                        else:
+                            # Try to use Audio class for supported formats (wav, mp3, etc.)
+                            try:
+                                # Only try for common supported formats
+                                if file.type in [
+                                    "audio/wav",
+                                    "audio/mpeg",
+                                    "audio/mp3",
+                                    "audio/ogg",
+                                ]:
+                                    audio.append(Audio(content=file_content))
+                                else:
+                                    enhanced_message += f"\n\n[🔊 Audio file attached: {file.name}. Format {file.type} may not be supported for direct processing.]\n"
+                            except Exception as audio_err:
+                                print(f"Audio processing error: {audio_err}")
+                                enhanced_message += f"\n\n[🔊 Audio file attached: {file.name}. Could not process audio.]\n"
 
                     # 3. Handle Video
                     elif file.type.startswith("video/"):
@@ -458,9 +489,36 @@ Please answer the question based on the context provided. If the context doesn't
                     if file.type.startswith("image/"):
                         images.append(Image(content=file_content))
 
-                    # 2. Handle Audio
+                    # 2. Handle Audio (voice notes and audio files)
                     elif file.type.startswith("audio/"):
-                        audio.append(Audio(content=file_content))
+                        # Voice notes from browser are typically audio/webm or audio/mp4
+                        # Most LLM models don't support direct audio input yet
+                        # For now, we add a note about the voice note to the message
+                        is_voice_note = (
+                            getattr(file, "isVoiceNote", False)
+                            or "voice" in file.name.lower()
+                        )
+                        duration = getattr(file, "duration", None)
+
+                        if is_voice_note:
+                            duration_str = f" ({duration}s)" if duration else ""
+                            enhanced_message += f"\n\n[🎤 Voice Note attached: {file.name}{duration_str}. Note: Audio transcription not yet supported. Please describe what you said in text.]\n"
+                        else:
+                            # Try to use Audio class for supported formats (wav, mp3, etc.)
+                            try:
+                                # Only try for common supported formats
+                                if file.type in [
+                                    "audio/wav",
+                                    "audio/mpeg",
+                                    "audio/mp3",
+                                    "audio/ogg",
+                                ]:
+                                    audio.append(Audio(content=file_content))
+                                else:
+                                    enhanced_message += f"\n\n[🔊 Audio file attached: {file.name}. Format {file.type} may not be supported for direct processing.]\n"
+                            except Exception as audio_err:
+                                print(f"Audio processing error: {audio_err}")
+                                enhanced_message += f"\n\n[🔊 Audio file attached: {file.name}. Could not process audio.]\n"
 
                     # 3. Handle Video
                     elif file.type.startswith("video/"):

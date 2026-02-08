@@ -274,28 +274,63 @@ function App() {
     if (files && files.length > 0) {
       // Convert files to base64 for backend
       filesForBackend = await Promise.all(files.map(async (file) => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onload = () => {
-            resolve({
-              name: file.name,
-              type: file.type,
-              size: file.size,
-              data: reader.result.split(',')[1] // Get base64 part only
-            })
-          }
-          reader.onerror = reject
-          reader.readAsDataURL(file)
-        })
+        // Check if this is a voice note (has blob property) or regular file
+        if (file.type === 'voice-note' || file.blob) {
+          // Voice note - already has blob, convert to base64
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => {
+              resolve({
+                name: file.name,
+                type: file.mimeType || 'audio/webm',
+                size: file.size,
+                data: reader.result.split(',')[1], // Get base64 part only
+                isVoiceNote: true,
+                duration: file.duration
+              })
+            }
+            reader.onerror = reject
+            reader.readAsDataURL(file.blob)
+          })
+        } else {
+          // Regular file
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => {
+              resolve({
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                data: reader.result.split(',')[1] // Get base64 part only
+              })
+            }
+            reader.onerror = reject
+            reader.readAsDataURL(file)
+          })
+        }
       }))
       
       // Also create URLs for display in UI
-      attachments = files.map((file) => ({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        url: URL.createObjectURL(file)
-      }))
+      attachments = files.map((file) => {
+        // Voice notes already have url
+        if (file.type === 'voice-note' || file.url) {
+          return {
+            name: file.name,
+            type: file.type === 'voice-note' ? file.mimeType : file.type,
+            size: file.size,
+            url: file.url,
+            duration: file.duration,
+            isVoiceNote: file.type === 'voice-note'
+          }
+        }
+        // Regular files need createObjectURL
+        return {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          url: URL.createObjectURL(file)
+        }
+      })
     }
 
     // Add user message immediately for responsiveness

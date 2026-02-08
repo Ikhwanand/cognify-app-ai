@@ -6,9 +6,11 @@ from datetime import datetime
 # File attachment schema for multimodal support
 class FileAttachment(SQLModel):
     name: str
-    type: str  # MIME type (e.g., 'image/png', 'application/pdf')
+    type: str  # MIME type (e.g., 'image/png', 'application/pdf', 'audio/webm')
     size: int
     data: str  # Base64 encoded file content
+    isVoiceNote: Optional[bool] = False  # Flag for voice note attachments
+    duration: Optional[float] = None  # Duration in seconds (for audio/video)
 
 
 # Request schemas

@@ -168,6 +168,13 @@ const SettingsModal = ({
                       <SelectItem value="nvidia/moonshotai/kimi-k2.5">Kimi K2.5</SelectItem>
                       <SelectItem value="nvidia/mistralai/ministral-14b-instruct-2512">Ministral 14B Instruct 2512</SelectItem>
                     </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Google</SelectLabel>
+                      <SelectItem value="google/gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
+                      <SelectItem value="google/gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</SelectItem>
+                      <SelectItem value="google/gemini-2.5-pro">Gemini 2.5 Pro</SelectItem>
+                      <SelectItem value="google/gemini-3-pro-preview">Gemini 3 Pro Preview</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>

@@ -26,3 +26,5 @@ lxml_html_clean
 psutil
 memory_profiler
 firecrawl-py
+google-genai
+pycountry

@@ -3,7 +3,8 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, User, Loader2, Sparkles, Square, Plus, X, FileText, Image as ImageIcon, File } from "lucide-react"
+import { Send, User, Loader2, Sparkles, Square, Plus, X, FileText, Image as ImageIcon, File, Mic } from "lucide-react"
+import { VoiceRecorder, VoiceNotePlayer } from "@/components/VoiceRecorder"
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -61,6 +62,19 @@ const FilePreview = ({ file, onRemove }) => {
 // Attachment display in message
 const MessageAttachment = ({ attachment }) => {
   const isImage = attachment.type?.startsWith('image/') || attachment.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+  const isVoiceNote = attachment.isVoiceNote || attachment.type === 'voice-note' || attachment.type?.startsWith('audio/');
+  
+  // Voice note player
+  if (isVoiceNote && attachment.url) {
+    return (
+      <div className="mt-2">
+        <VoiceNotePlayer 
+          audioUrl={attachment.url} 
+          duration={attachment.duration} 
+        />
+      </div>
+    );
+  }
   
   if (isImage && attachment.url) {
     return (
@@ -218,6 +232,7 @@ const ChatArea = ({
 }) => {
   const [input, setInput] = React.useState("")
   const [attachedFiles, setAttachedFiles] = React.useState([])
+  const [isRecording, setIsRecording] = React.useState(false)
   const scrollRef = React.useRef(null)
   const textareaRef = React.useRef(null)
   const fileInputRef = React.useRef(null)
@@ -232,8 +247,17 @@ const ChatArea = ({
   const handleSubmit = (e) => {
     e.preventDefault()
     if ((input.trim() || attachedFiles.length > 0) && !isLoading && !isStreaming) {
+      // Check if sending voice note without text - add default message
+      const hasVoiceNote = attachedFiles.some(f => f.type === 'voice-note' || f.blob)
+      let messageContent = input.trim()
+      
+      // If only voice note without text, use placeholder message
+      if (!messageContent && hasVoiceNote) {
+        messageContent = "[Voice Note]"
+      }
+      
       // Always allow file uploads - backend will handle or return error if needed
-      onSendMessage(input.trim(), attachedFiles.length > 0 ? attachedFiles : null)
+      onSendMessage(messageContent, attachedFiles.length > 0 ? attachedFiles : null)
       setAttachedFiles([])
       setInput("")
       // Reset textarea height
@@ -275,6 +299,35 @@ const ChatArea = ({
 
   const handleRemoveFile = (index) => {
     setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  }
+
+  // Voice note handlers
+  const handleVoiceRecordingComplete = (recording) => {
+    setIsRecording(false)
+    
+    // Create a voice note attachment
+    const voiceAttachment = {
+      name: `Voice Note (${formatVoiceDuration(recording.duration)})`,
+      type: 'voice-note',
+      size: recording.blob.size,
+      url: recording.url,
+      blob: recording.blob,
+      duration: recording.duration,
+      mimeType: recording.mimeType
+    }
+    
+    // Add to attached files as a special voice note type
+    setAttachedFiles(prev => [...prev, voiceAttachment])
+  }
+
+  const handleVoiceRecordingCancel = () => {
+    setIsRecording(false)
+  }
+
+  const formatVoiceDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
   const allMessages = streamingMessage 
@@ -351,23 +404,50 @@ const ChatArea = ({
               size="icon"
               variant="ghost"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || isStreaming}
+              disabled={isLoading || isStreaming || isRecording}
               className="h-10 w-10 rounded-xl shrink-0 text-muted-foreground hover:text-foreground"
               title="Attach files (images, PDFs, documents)"
             >
               <Plus className="h-5 w-5" />
             </Button>
 
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder={attachedFiles.length > 0 ? "Add a message about your files..." : "Ask a question about your documents..."}
-              className="flex-1 min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 py-3 px-2"
-              rows={1}
-              disabled={isLoading || isStreaming}
-            />
+            {/* Voice Recorder */}
+            {isRecording ? (
+              <VoiceRecorder
+                onRecordingComplete={handleVoiceRecordingComplete}
+                onCancel={handleVoiceRecordingCancel}
+                disabled={isLoading || isStreaming}
+                autoStart={true}
+                className="flex-1"
+              />
+            ) : (
+              <>
+                <Textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder={attachedFiles.length > 0 ? "Add a message about your files..." : "Ask a question about your documents..."}
+                  className="flex-1 min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 py-3 px-2"
+                  rows={1}
+                  disabled={isLoading || isStreaming}
+                />
+
+                {/* Voice Note Button */}
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setIsRecording(true)}
+                  disabled={isLoading || isStreaming}
+                  className="h-10 w-10 rounded-xl shrink-0 text-muted-foreground hover:text-foreground hover:bg-primary/10 transition-colors"
+                  title="Record voice note"
+                >
+                  <Mic className="h-5 w-5" />
+                </Button>
+              </>
+            )}
+
             {isStreaming ? (
               <Button
                 type="button"
@@ -394,7 +474,7 @@ const ChatArea = ({
             )}
           </div>
           <p className="text-xs text-muted-foreground text-center mt-2">
-            {isStreaming ? "Click stop to cancel streaming" : "Press Enter to send, Shift+Enter for new line"}
+            {isStreaming ? "Click stop to cancel streaming" : isRecording ? "Recording... Click stop when done" : "Press Enter to send, Shift+Enter for new line. Click 🎤 for voice note"}
           </p>
         </form>
       </div>

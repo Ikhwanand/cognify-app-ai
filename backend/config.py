@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # API Keys
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     nvidia_api_key: str = os.getenv("NVIDIA_API_KEY", "")
+    google_api_key: str = os.getenv("GOOGLE_API_KEY", "")
 
     # Server
     host: str = os.getenv("HOST", "0.0.0.0")
