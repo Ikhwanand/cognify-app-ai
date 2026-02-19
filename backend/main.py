@@ -4,6 +4,10 @@ from contextlib import asynccontextmanager
 from database import init_db
 from routers import chat, documents, settings, evals, mcp
 from config import settings as app_settings
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from limiter import limiter
 
 
 @asynccontextmanager
@@ -24,8 +28,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS
 app.add_middleware(
+    SlowAPIMiddleware,
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000"],
     allow_credentials=True,

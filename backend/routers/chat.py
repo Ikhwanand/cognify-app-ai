@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from limiter import limiter
 from sqlmodel import Session, select
 from database import get_db
 from schemas.chat import (
@@ -64,7 +65,9 @@ async def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/message", response_model=MessageResponse)
+@limiter.limit("10/minute")  # 10 requests per minute
 async def send_message(
+    request: Request,
     message: MessageCreate,
     top_k: int = 5,
     include_sources: bool = True,
