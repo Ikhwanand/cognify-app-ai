@@ -28,6 +28,7 @@ const Sidebar = ({
   onUploadDocument,
   onDeleteDocument,
   onOpenSettings,
+  onOpenSkills,
   selectedChatId,
   className
 }) => {
@@ -232,6 +233,34 @@ const Sidebar = ({
         </div>
 
         <Separator />
+
+        {/* Skills */}
+        <div className="p-3 pb-0">
+          {isCollapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onOpenSkills}
+                  className="w-full h-10"
+                >
+                  <Sparkles className="h-4 w-4 text-purple-500" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Skills</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button
+              variant="ghost"
+              onClick={onOpenSkills}
+              className="w-full justify-start gap-2"
+            >
+              <Sparkles className="h-4 w-4 text-purple-500" />
+              Skills
+            </Button>
+          )}
+        </div>
 
         {/* Settings */}
         <div className="p-3">

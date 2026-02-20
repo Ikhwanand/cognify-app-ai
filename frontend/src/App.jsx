@@ -5,6 +5,7 @@ import { Header } from '@/components/Header'
 import { SettingsModal, defaultSettings } from '@/components/SettingsModal'
 import EvalDashboard from '@/components/EvalDashboard'
 import MCPManager from '@/components/MCPManager'
+import SkillManager from '@/components/SkillManager'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { chatAPI, documentsAPI, settingsAPI, healthAPI } from '@/services/api'
 
@@ -43,6 +44,7 @@ function App() {
   // Dashboard view state
   const [showDashboard, setShowDashboard] = useState(false)
   const [showMCP, setShowMCP] = useState(false)
+  const [showSkills, setShowSkills] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
 
   // Persist selectedChatId to localStorage
@@ -567,6 +569,7 @@ function App() {
         onUploadDocument={handleUploadDocument}
         onDeleteDocument={handleDeleteDocument}
         onOpenSettings={handleOpenSettings}
+        onOpenSkills={() => { setShowSkills(true); setShowDashboard(false); setShowMCP(false); }}
         selectedChatId={selectedChatId}
       />
 
@@ -578,9 +581,10 @@ function App() {
           currentChatTitle={getCurrentChatTitle()}
           isBackendOnline={isBackendOnline}
           onOpenDashboard={() => { setShowDashboard(true); setShowMCP(false); }}
-          onOpenMCP={() => { setShowMCP(true); setShowDashboard(false); }}
+          onOpenMCP={() => { setShowMCP(true); setShowDashboard(false); setShowSkills(false); }}
           showDashboard={showDashboard}
           showMCP={showMCP}
+          showSkills={showSkills}
         />
         
         {showDashboard ? (
@@ -589,6 +593,8 @@ function App() {
           <ErrorBoundary>
             <MCPManager onBack={() => setShowMCP(false)} />
           </ErrorBoundary>
+        ) : showSkills ? (
+          <SkillManager onBack={() => setShowSkills(false)} />
         ) : (
           <ChatArea
             messages={messages}

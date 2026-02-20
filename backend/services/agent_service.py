@@ -21,6 +21,7 @@ from agno.tools.newspaper4k import Newspaper4kTools
 from agno.tools.reasoning import ReasoningTools
 from agno.tools.youtube import YouTubeTools
 from agno.tools.firecrawl import FirecrawlTools
+from agno.tools.pubmed import PubmedTools
 
 # from agno.compression.manager import CompressionManager
 from agno.guardrails import PIIDetectionGuardrail, PromptInjectionGuardrail
@@ -62,6 +63,7 @@ class AgentService:
             ReasoningTools(),  # Logical reasoning
             YouTubeTools(),  # YouTube search
             FirecrawlTools(all=True),  # Firecrawl tools
+            PubmedTools(),  # PubMed search
         ]
 
     def get_all_tools(self) -> List:
@@ -132,6 +134,7 @@ IMPORTANT: You MUST use these MCP tools when appropriate to fulfill user request
 - YouTube search
 - Calculator for mathematical computations
 - Reasoning tools for logical analysis
+- Pubmed for medical research papers
 
 **LinkedIn Tools:**
 - get_linkedin_profile: Scrape LinkedIn profile data by URL
@@ -140,6 +143,14 @@ IMPORTANT: You MUST use these MCP tools when appropriate to fulfill user request
 
 Use these tools proactively when the user's question would benefit from current data, calculations, or external information. Always explain what tool you're using and why."""
         )
+
+        # Fetch Skills Directory
+        skills_loader = None
+        skills_dir = os.path.join(os.path.dirname(__file__), "..", "agent_skills")
+        if os.path.exists(skills_dir) and os.listdir(skills_dir):
+            from agno.skills import Skills, LocalSkills
+
+            skills_loader = Skills(loaders=[LocalSkills(skills_dir)])
 
         # Determine model provider
         if model.startswith("nvidia/"):
@@ -172,6 +183,7 @@ Use these tools proactively when the user's question would benefit from current 
             ),
             add_datetime_to_context=True,
             tools=tools,
+            skills=skills_loader,
             enable_agentic_memory=True,
             # compression_manager=compression_manager,
             add_history_to_context=True,

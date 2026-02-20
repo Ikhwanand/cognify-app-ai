@@ -347,6 +347,36 @@ export const mcpAPI = {
   getPresets: () => fetchAPI('/mcp/presets'),
 };
 
+// ============ Skills API ============
+
+export const skillsAPI = {
+  // Get all skills
+  getAll: () => fetchAPI('/skills/'),
+  
+  // Get active skills
+  getActive: () => fetchAPI('/skills/active'),
+  
+  // Get a single skill
+  get: (skillId) => fetchAPI(`/skills/${skillId}`),
+  
+  // Create a new skill
+  create: (skillData) => fetchAPI('/skills/', {
+    method: 'POST',
+    body: JSON.stringify(skillData),
+  }),
+  
+  // Update a skill
+  update: (skillId, updateData) => fetchAPI(`/skills/${skillId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updateData),
+  }),
+  
+  // Delete a skill
+  delete: (skillId) => fetchAPI(`/skills/${skillId}`, {
+    method: 'DELETE',
+  }),
+};
+
 export default {
   chat: chatAPI,
   documents: documentsAPI,
@@ -354,4 +384,5 @@ export default {
   health: healthAPI,
   evals: evalsAPI,
   mcp: mcpAPI,
+  skills: skillsAPI,
 };

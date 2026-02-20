@@ -161,12 +161,13 @@ const SettingsModal = ({
                       <SelectLabel>Nvidia NIM</SelectLabel>
                       <SelectItem value="nvidia/openai/gpt-oss-120b">GPT OSS 120B</SelectItem>
                       <SelectItem value="nvidia/qwen/qwen3-next-80b-a3b-instruct">Qwen 3 Next 80B</SelectItem>
+                      <SelectItem value="nvidia/qwen/qwen3.5-397b-a17b">Qwen 3.5 397B</SelectItem>
                       <SelectItem value="nvidia/mistralai/mistral-large-3-675b-instruct-2512">Mistral Large 3 675B</SelectItem>
                       <SelectItem value="nvidia/meta/llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B 16E</SelectItem>
-                      <SelectItem value="nvidia/moonshotai/kimi-k2-thinking">Kimi K2 Thinking</SelectItem>
-                      <SelectItem value="nvidia/meta/llama-4-maverick-17b-128e-instruct">Llama 4 Maverick 17B 128E</SelectItem>
-                      <SelectItem value="nvidia/moonshotai/kimi-k2.5">Kimi K2.5</SelectItem>
+                      <SelectItem value="nvidia/stepfun-ai/step-3.5-flash">Step 3.5 Flash</SelectItem>
+                      <SelectItem value="nvidia/minimaxai/minimax-m2.1">Minimax M2.1</SelectItem>
                       <SelectItem value="nvidia/mistralai/ministral-14b-instruct-2512">Ministral 14B Instruct 2512</SelectItem>
+                      <SelectItem value="nvidia/z-ai/glm5">GLM5</SelectItem>
                     </SelectGroup>
                     <SelectGroup>
                       <SelectLabel>Google</SelectLabel>

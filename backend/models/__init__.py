@@ -2,6 +2,7 @@ from .chat import ChatSession, ChatMessage
 from .document import Document, DocumentChunk
 from .evaluation import EvalResult, EvalBenchmark, EvalType, EvalStatus
 from .mcp_server import MCPServer, MCPTransportType, MCPServerStatus
+from .skill import Skill
 
 __all__ = [
     "ChatSession",
@@ -15,4 +16,5 @@ __all__ = [
     "MCPServer",
     "MCPTransportType",
     "MCPServerStatus",
+    "Skill",
 ]
