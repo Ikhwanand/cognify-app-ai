@@ -22,6 +22,7 @@ from agno.tools.reasoning import ReasoningTools
 from agno.tools.youtube import YouTubeTools
 from agno.tools.firecrawl import FirecrawlTools
 from agno.tools.pubmed import PubmedTools
+from agno.tools.github import GithubTools
 
 # from agno.compression.manager import CompressionManager
 from agno.guardrails import PIIDetectionGuardrail, PromptInjectionGuardrail
@@ -38,6 +39,8 @@ os.environ["GROQ_API_KEY"] = settings.groq_api_key
 os.environ["NVIDIA_API_KEY"] = settings.nvidia_api_key
 os.environ["FIRECRAWL_API_KEY"] = settings.firecrawl_api_key
 os.environ["GOOGLE_API_KEY"] = settings.google_api_key
+os.environ["GITHUB_ACCESS_TOKEN"] = settings.github_access_token
+os.environ["GITHUB_BASE_URL"] = settings.github_base_url
 
 
 class AgentService:
@@ -64,6 +67,7 @@ class AgentService:
             YouTubeTools(),  # YouTube search
             FirecrawlTools(all=True),  # Firecrawl tools
             PubmedTools(),  # PubMed search
+            GithubTools(),  # Github tools
         ]
 
     def get_all_tools(self) -> List:

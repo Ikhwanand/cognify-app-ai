@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # Firecrawl Settings
     firecrawl_api_key: str = os.getenv("FIRECRAWL_API_KEY", "")
 
+    # Github Settings
+    github_access_token: str = os.getenv("GITHUB_ACCESS_TOKEN", "")
+    github_base_url: str = os.getenv("GITHUB_BASE_URL", "https://api.github.com")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
