@@ -30,3 +30,4 @@ google-genai
 pycountry
 slowapi
 pygithub
+fastmcp

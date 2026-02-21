@@ -31,6 +31,13 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     print("👋 Shutting down...")
+    try:
+        from services.mcp_service import mcp_service
+
+        await mcp_service.close_all_connections()
+        print("✅ MCP connections closed")
+    except Exception as e:
+        print(f"⚠️ Failed to close MCP connections: {e}")
 
 
 app = FastAPI(

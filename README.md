@@ -12,6 +12,9 @@ A personal knowledge assistant powered by RAG (Retrieval Augmented Generation). 
 - 📄 **Document Upload** - Upload PDF, DOCX, TXT, and Markdown files
 - 💬 **AI Chat** - Ask questions about your uploaded documents
 - 🔍 **RAG Search** - Semantic search across your knowledge base
+- 🤖 **Agentic Modes** - Data Analyst and Software Engineer modes
+- 🔌 **MCP Server Integration** - Local system access via our custom MCP Server
+- 🧠 **Agent Skills** - Customizable skillsets synced directly to the isolated `agent_skills` folder
 - 🎨 **Dark/Light Mode** - Beautiful UI with theme support
 - ⚙️ **Configurable Models** - Switch between Groq and Nvidia NIM models
 - 📊 **Chat History** - Persistent conversation history
@@ -22,7 +25,7 @@ A personal knowledge assistant powered by RAG (Retrieval Augmented Generation). 
 ### Backend
 
 - **FastAPI** - Modern Python web framework
-- **Agno** - AI agent framework with RAG capabilities
+- **Agno** - AI agent framework with RAG capabilities and MCP tools
 - **PostgreSQL + PgVector** - Vector database for embeddings
 - **SQLModel** - SQL database ORM
 - **Groq / Nvidia NIM** - LLM providers
@@ -127,14 +130,17 @@ VITE_API_BASE_URL=http://localhost:8000/api
 
 ```
 cognify-app/
+├── agent_skills/        # Dynamic storage for custom AI Agent Skills
+├── agent_workspace/     # Safe isolated sandbox for AI generated files and python execution
 ├── backend/
 │   ├── main.py              # FastAPI application entry
 │   ├── config.py            # Configuration management
 │   ├── database.py          # Database connection
+│   ├── mcp_servers/         # Contains our custom `cognify_mcp.py` MCP server
 │   ├── models/              # SQLModel database models
 │   ├── routers/             # API route handlers
 │   ├── schemas/             # Pydantic schemas
-│   ├── services/            # Business logic
+│   ├── services/            # Business logic (RAG, Agents, MCP Integration, Skills)
 │   └── requirements.txt     # Python dependencies
 │
 ├── frontend/

@@ -24,6 +24,7 @@ function App() {
   const [darkMode, setDarkMode] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [selectedChatId, setSelectedChatId] = useState(() => getStoredChatId())
+  const [mode, setMode] = useState('chat') // 'chat', 'analyst', 'engineer'
   const [chatHistory, setChatHistory] = useState([])
   const [knowledgeBase, setKnowledgeBase] = useState([])
   const [messages, setMessages] = useState([])
@@ -369,6 +370,7 @@ function App() {
         settings.top_k ?? settings.topK ?? 5,
         settings.include_sources ?? settings.includeSources ?? true,
         filesForBackend, // Pass files for multimodal processing
+        mode, // Add mode param
         // onChunk
         (data) => {
           if (data.type === 'session_id' && data.session_id) {
@@ -453,7 +455,9 @@ function App() {
             content,
             selectedChatId,
             settings.top_k ?? settings.topK ?? 5,
-            settings.include_sources ?? settings.includeSources ?? true
+            settings.include_sources ?? settings.includeSources ?? true,
+            filesForBackend, // Missing from previous code
+            mode
           )
           
           // Update selected chat ID if this was a new chat
@@ -585,6 +589,8 @@ function App() {
           showDashboard={showDashboard}
           showMCP={showMCP}
           showSkills={showSkills}
+          mode={mode}
+          onModeChange={setMode}
         />
         
         {showDashboard ? (

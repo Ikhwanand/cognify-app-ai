@@ -87,6 +87,7 @@ class AgentService:
         system_prompt: str = None,
         session_id: str = None,
         include_mcp_tools: bool = True,
+        mode: str = "chat",
     ) -> Agent:
         """Create an Agno agent with specified settings
 
@@ -125,9 +126,21 @@ You have access to the following MCP (Model Context Protocol) tools that extend 
 
 IMPORTANT: You MUST use these MCP tools when appropriate to fulfill user requests. These tools are fully available and functional. Call them just like any other tool function when the user's request matches their capabilities."""
 
-        system_prompt = (
-            system_prompt
-            or f"""You are a helpful AI assistant with access to various tools. Your available tools include:
+        if mode == "analyst":
+            default_sys_prompt = f"""You are a Senior Data Scientist and AI Data Analyst.
+Your role is to analyze data, create visualizations, and provide deep insights.
+You have access to tools including Python code execution to process data (like CSV/Excel) and generate visualizations.
+Always use numbers, statistics, and clear methodologies when answering.
+When asked to analyze data, try to use the appropriate tools to read the data, process it, and deliver insights.
+{mcp_info}"""
+        elif mode == "engineer":
+            default_sys_prompt = f"""You are a Senior Software Engineer.
+Your role is to develop robust applications, write clean code, and help architect systems.
+You can read and write files, navigate projects, and run terminal commands if tools are available.
+Always provide complete, working code and follow software engineering best practices.
+{mcp_info}"""
+        else:
+            default_sys_prompt = f"""You are a helpful AI assistant with access to various tools. Your available tools include:
 
 **Built-in Tools:**
 - Web search for finding information online
@@ -146,11 +159,12 @@ IMPORTANT: You MUST use these MCP tools when appropriate to fulfill user request
 - get_company_linkedin_profile: Scrape LinkedIn company data{mcp_info}
 
 Use these tools proactively when the user's question would benefit from current data, calculations, or external information. Always explain what tool you're using and why."""
-        )
+
+        system_prompt = system_prompt or default_sys_prompt
 
         # Fetch Skills Directory
         skills_loader = None
-        skills_dir = os.path.join(os.path.dirname(__file__), "..", "agent_skills")
+        skills_dir = os.path.join(os.path.dirname(__file__), "..", "..", "agent_skills")
         if os.path.exists(skills_dir) and os.listdir(skills_dir):
             from agno.skills import Skills, LocalSkills
 
@@ -289,6 +303,7 @@ Please answer the question based on the context provided. If the context doesn't
         context: Optional[List[str]] = None,
         user_settings: Optional[Dict] = None,
         files: Optional[List[FileAttachment]] = None,
+        mode: str = "chat",
     ) -> str:
         """Send a message and get a response (non-streaming)"""
 
@@ -304,6 +319,7 @@ Please answer the question based on the context provided. If the context doesn't
             temperature=temperature,
             system_prompt=system_prompt,
             session_id=session_id,
+            mode=mode,
         )
 
         enhanced_message = self._build_enhanced_message(message, context)
@@ -368,7 +384,7 @@ Please answer the question based on the context provided. If the context doesn't
                         try:
                             text = file_content.decode("utf-8")
                             enhanced_message += f"\n\n--- Content of {file.name} ---\n{text}\n--- End of {file.name} ---\n"
-                        except:
+                        except UnicodeDecodeError:
                             files_data.append(
                                 File(content=file_content, file_name=file.name)
                             )
@@ -464,6 +480,7 @@ Please answer the question based on the context provided. If the context doesn't
         context: Optional[List[str]] = None,
         user_settings: Optional[Dict] = None,
         files: Optional[List[FileAttachment]] = None,
+        mode: str = "chat",
     ):
         """Send a message and stream the response"""
         import asyncio
@@ -480,6 +497,7 @@ Please answer the question based on the context provided. If the context doesn't
             temperature=temperature,
             system_prompt=system_prompt,
             session_id=session_id,
+            mode=mode,
         )
 
         enhanced_message = self._build_enhanced_message(message, context)

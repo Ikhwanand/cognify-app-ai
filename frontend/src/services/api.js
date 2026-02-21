@@ -59,7 +59,7 @@ export const chatAPI = {
   deleteSession: (sessionId) => fetchAPI(`/chat/sessions/${sessionId}`, { method: 'DELETE' }),
 
   // Send a message and get AI response (non-streaming)
-  sendMessage: (content, sessionId = null, topK = 5, includeSources = true, files = null) => {
+  sendMessage: (content, sessionId = null, topK = 5, includeSources = true, files = null, mode = "chat") => {
     const params = new URLSearchParams({
       top_k: topK.toString(),
       include_sources: includeSources.toString(),
@@ -70,13 +70,14 @@ export const chatAPI = {
       body: JSON.stringify({
         content,
         session_id: sessionId,
+        mode: mode,
         files: files, // Array of {name, type, size, data} objects
       }),
     });
   },
 
   // Send a message with streaming response
-  sendMessageStream: (content, sessionId = null, topK = 5, includeSources = true, files = null, onChunk, onDone, onError) => {
+  sendMessageStream: (content, sessionId = null, topK = 5, includeSources = true, files = null, mode = "chat", onChunk, onDone, onError) => {
     const params = new URLSearchParams({
       top_k: topK.toString(),
       include_sources: includeSources.toString(),
@@ -95,6 +96,7 @@ export const chatAPI = {
           body: JSON.stringify({
             content,
             session_id: sessionId,
+            mode: mode,
             files: files, // Array of {name, type, size, data} objects
           }),
           signal: abortController.signal,

@@ -105,6 +105,7 @@ async def send_message(
         context=contexts if contexts else None,
         user_settings=_user_settings.model_dump(),
         files=message.files,
+        mode=message.mode,
     )
 
     # Save assistant message
@@ -176,6 +177,7 @@ async def send_message_stream(
                 context=contexts if contexts else None,
                 user_settings=_user_settings.model_dump(),
                 files=message.files,
+                mode=message.mode,
             ):
                 # Check if cancelled
                 if not active_streams.get(stream_id, False):

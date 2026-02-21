@@ -1,7 +1,8 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Moon, Sun, Sparkles, Github, Wifi, WifiOff, MessagesSquare, BarChart3, Zap } from "lucide-react"
+import { Moon, Sun, Sparkles, Github, Wifi, WifiOff, MessagesSquare, BarChart3, Zap, Bot, BarChart, Code2 } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const Header = ({ 
   darkMode, 
@@ -12,6 +13,9 @@ const Header = ({
   onOpenMCP,
   showDashboard = false,
   showMCP = false,
+  showSkills = false,
+  mode = "chat",
+  onModeChange,
   className 
 }) => {
   return (
@@ -42,6 +46,37 @@ const Header = ({
           <span className="text-muted-foreground text-sm">New Conversation</span>
         )}
       </div>
+
+      {/* Center - Mode Selection */}
+      {!showDashboard && !showMCP && !showSkills && (
+        <div className="flex justify-center items-center flex-1 mx-4">
+          <Select value={mode} onValueChange={onModeChange}>
+            <SelectTrigger className="w-[180px] h-9 bg-background">
+              <SelectValue placeholder="Select Mode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="chat">
+                <div className="flex items-center gap-2">
+                  <Bot className="w-4 h-4" />
+                  <span>Chat Assistant</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="analyst">
+                <div className="flex items-center gap-2">
+                  <BarChart className="w-4 h-4" />
+                  <span>Data Analyst</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="engineer">
+                <div className="flex items-center gap-2">
+                  <Code2 className="w-4 h-4" />
+                  <span>Software Engineer</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Right side - Actions */}
       <div className="flex items-center gap-2">

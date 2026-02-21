@@ -9,7 +9,7 @@ from fastapi import HTTPException
 
 def sync_skills_to_disk(db: Session):
     """Synchronize active skills to the disk so Agno LocalSkills can load them."""
-    skills_dir = os.path.join(os.path.dirname(__file__), "..", "agent_skills")
+    skills_dir = os.path.join(os.path.dirname(__file__), "..", "..", "agent_skills")
     if os.path.exists(skills_dir):
         shutil.rmtree(skills_dir)
     os.makedirs(skills_dir, exist_ok=True)

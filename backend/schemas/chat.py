@@ -17,6 +17,7 @@ class FileAttachment(SQLModel):
 class MessageCreate(SQLModel):
     content: str
     session_id: Optional[str] = None
+    mode: Optional[str] = "chat"
     files: Optional[List[FileAttachment]] = None  # Multimodal file attachments
 
 
