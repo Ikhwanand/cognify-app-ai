@@ -399,14 +399,16 @@ class MCPService:
                 params = StdioServerParameters(
                     command=sys.executable, args=["-u"] + args_list
                 )
-                return MCPTools(server_params=params)
+                return MCPTools(server_params=params, timeout_seconds=3600)
 
             # Fallback
-            return MCPTools(command=server.command)
+            return MCPTools(command=server.command, timeout_seconds=3600)
         else:
             if not server.url:
                 raise ValueError("URL is required for HTTP/SSE transport type")
-            return MCPTools(transport=server.transport_type, url=server.url)
+            return MCPTools(
+                transport=server.transport_type, url=server.url, timeout_seconds=3600
+            )
 
     # Statistics
     def get_stats(self) -> Dict[str, int]:
