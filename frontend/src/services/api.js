@@ -4,9 +4,9 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 // Helper function for API calls
 async function fetchAPI(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
-  
+
   const defaultHeaders = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   };
 
   const config = {
@@ -18,9 +18,11 @@ async function fetchAPI(endpoint, options = {}) {
   };
 
   const response = await fetch(url, config);
-  
+
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'An error occurred' }));
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "An error occurred" }));
     throw new Error(error.detail || `HTTP error! status: ${response.status}`);
   }
 
@@ -31,10 +33,10 @@ async function fetchAPI(endpoint, options = {}) {
 
   // Try to parse as JSON, if empty or not JSON return success object
   const text = await response.text();
-  if (!text || text.trim() === '') {
+  if (!text || text.trim() === "") {
     return { success: true };
   }
-  
+
   try {
     return JSON.parse(text);
   } catch {
@@ -47,26 +49,34 @@ async function fetchAPI(endpoint, options = {}) {
 
 export const chatAPI = {
   // Get all chat sessions
-  getSessions: () => fetchAPI('/chat/sessions'),
+  getSessions: () => fetchAPI("/chat/sessions"),
 
   // Get a single chat session with messages
   getSession: (sessionId) => fetchAPI(`/chat/sessions/${sessionId}`),
 
   // Create a new chat session
-  createSession: () => fetchAPI('/chat/sessions', { method: 'POST' }),
+  createSession: () => fetchAPI("/chat/sessions", { method: "POST" }),
 
   // Delete a chat session
-  deleteSession: (sessionId) => fetchAPI(`/chat/sessions/${sessionId}`, { method: 'DELETE' }),
+  deleteSession: (sessionId) =>
+    fetchAPI(`/chat/sessions/${sessionId}`, { method: "DELETE" }),
 
   // Send a message and get AI response (non-streaming)
-  sendMessage: (content, sessionId = null, topK = 5, includeSources = true, files = null, mode = "chat") => {
+  sendMessage: (
+    content,
+    sessionId = null,
+    topK = 5,
+    includeSources = true,
+    files = null,
+    mode = "chat",
+  ) => {
     const params = new URLSearchParams({
       top_k: topK.toString(),
       include_sources: includeSources.toString(),
     });
-    
+
     return fetchAPI(`/chat/message?${params}`, {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify({
         content,
         session_id: sessionId,
@@ -77,74 +87,94 @@ export const chatAPI = {
   },
 
   // Send a message with streaming response
-  sendMessageStream: (content, sessionId = null, topK = 5, includeSources = true, files = null, mode = "chat", onChunk, onDone, onError) => {
+  sendMessageStream: (
+    content,
+    sessionId = null,
+    topK = 5,
+    includeSources = true,
+    files = null,
+    mode = "chat",
+    onChunk,
+    onDone,
+    onError,
+  ) => {
     const params = new URLSearchParams({
       top_k: topK.toString(),
       include_sources: includeSources.toString(),
     });
-    
+
     const abortController = new AbortController();
     let streamId = null;
-    
+
     const fetchStream = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/chat/message/stream?${params}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        const response = await fetch(
+          `${API_BASE_URL}/chat/message/stream?${params}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              content,
+              session_id: sessionId,
+              mode: mode,
+              files: files, // Array of {name, type, size, data} objects
+            }),
+            signal: abortController.signal,
           },
-          body: JSON.stringify({
-            content,
-            session_id: sessionId,
-            mode: mode,
-            files: files, // Array of {name, type, size, data} objects
-          }),
-          signal: abortController.signal,
-        });
+        );
 
         if (!response.ok) {
-          const error = await response.json().catch(() => ({ detail: 'Stream error' }));
-          throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+          const error = await response
+            .json()
+            .catch(() => ({ detail: "Stream error" }));
+          throw new Error(
+            error.detail || `HTTP error! status: ${response.status}`,
+          );
         }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = '';
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
-          
+
           if (done) break;
-          
+
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() || '';
+          const lines = buffer.split("\n\n");
+          buffer = lines.pop() || "";
 
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
+            if (line.startsWith("data: ")) {
               try {
                 const data = JSON.parse(line.slice(6));
-                
-                if (data.type === 'start') {
+
+                if (data.type === "start") {
                   streamId = data.stream_id;
                   if (data.session_id) {
-                    onChunk?.({ type: 'session_id', session_id: data.session_id });
+                    onChunk?.({
+                      type: "session_id",
+                      session_id: data.session_id,
+                    });
                   }
-                } else if (data.type === 'chunk') {
+                } else if (data.type === "chunk") {
                   onChunk?.(data);
-                } else if (data.type === 'done') {
+                } else if (data.type === "done") {
                   onDone?.(data);
-                } else if (data.type === 'error') {
+                } else if (data.type === "error") {
                   onError?.(new Error(data.error));
                 }
               } catch (e) {
-                console.error('Failed to parse SSE data:', e);
+                console.error("Failed to parse SSE data:", e);
               }
             }
           }
         }
       } catch (error) {
-        if (error.name !== 'AbortError') {
+        if (error.name !== "AbortError") {
           onError?.(error);
         }
       }
@@ -159,10 +189,10 @@ export const chatAPI = {
         if (streamId) {
           try {
             await fetch(`${API_BASE_URL}/chat/message/cancel/${streamId}`, {
-              method: 'POST',
+              method: "POST",
             });
           } catch (e) {
-            console.error('Failed to cancel stream:', e);
+            console.error("Failed to cancel stream:", e);
           }
         }
       },
@@ -174,22 +204,24 @@ export const chatAPI = {
 
 export const documentsAPI = {
   // Get all documents
-  getAll: () => fetchAPI('/documents/'),
+  getAll: () => fetchAPI("/documents/"),
 
   // Upload a document
   upload: async (file) => {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
 
     const url = `${API_BASE_URL}/documents/upload`;
     const response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       body: formData,
       // Don't set Content-Type header - browser will set it with boundary
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      const error = await response
+        .json()
+        .catch(() => ({ detail: "Upload failed" }));
       throw new Error(error.detail || `HTTP error! status: ${response.status}`);
     }
 
@@ -197,23 +229,25 @@ export const documentsAPI = {
   },
 
   // Delete a document
-  delete: (documentId) => fetchAPI(`/documents/${documentId}`, { method: 'DELETE' }),
+  delete: (documentId) =>
+    fetchAPI(`/documents/${documentId}`, { method: "DELETE" }),
 };
 
 // ============ Settings API ============
 
 export const settingsAPI = {
   // Get current settings
-  get: () => fetchAPI('/settings/'),
+  get: () => fetchAPI("/settings/"),
 
   // Update settings
-  update: (settings) => fetchAPI('/settings/', {
-    method: 'POST',
-    body: JSON.stringify(settings),
-  }),
+  update: (settings) =>
+    fetchAPI("/settings/", {
+      method: "POST",
+      body: JSON.stringify(settings),
+    }),
 
   // Reset settings to defaults
-  reset: () => fetchAPI('/settings/reset', { method: 'POST' }),
+  reset: () => fetchAPI("/settings/reset", { method: "POST" }),
 };
 
 // ============ Health Check ============
@@ -221,7 +255,9 @@ export const settingsAPI = {
 export const healthAPI = {
   check: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL.replace('/api', '')}/health`);
+      const response = await fetch(
+        `${API_BASE_URL.replace("/api", "")}/health`,
+      );
       return response.ok;
     } catch {
       return false;
@@ -233,150 +269,224 @@ export const healthAPI = {
 
 export const evalsAPI = {
   // Dashboard endpoints - fetches ALL data (no day filter)
-  getSummary: () => fetchAPI('/evals/dashboard/summary'),
-  
-  getStats: () => fetchAPI('/evals/dashboard/stats'),
-  
-  getHistory: () => fetchAPI('/evals/dashboard/history'),
-  
-  getToolUsage: () => fetchAPI('/evals/dashboard/tool-usage'),
-  
+  getSummary: () => fetchAPI("/evals/dashboard/summary"),
+
+  getStats: () => fetchAPI("/evals/dashboard/stats"),
+
+  getHistory: () => fetchAPI("/evals/dashboard/history"),
+
+  getToolUsage: () => fetchAPI("/evals/dashboard/tool-usage"),
+
   // Results
   getResults: (params = {}) => {
     const searchParams = new URLSearchParams();
-    if (params.evalType) searchParams.append('eval_type', params.evalType);
-    if (params.modelId) searchParams.append('model_id', params.modelId);
-    if (params.limit) searchParams.append('limit', params.limit);
-    if (params.offset) searchParams.append('offset', params.offset);
+    if (params.evalType) searchParams.append("eval_type", params.evalType);
+    if (params.modelId) searchParams.append("model_id", params.modelId);
+    if (params.limit) searchParams.append("limit", params.limit);
+    if (params.offset) searchParams.append("offset", params.offset);
     return fetchAPI(`/evals/results?${searchParams}`);
   },
-  
+
   getResult: (resultId) => fetchAPI(`/evals/results/${resultId}`),
-  
+
   // Delete all evaluation data
-  deleteAllResults: () => fetchAPI('/evals/results/all', {
-    method: 'DELETE',
-  }),
-  
+  deleteAllResults: () =>
+    fetchAPI("/evals/results/all", {
+      method: "DELETE",
+    }),
+
   // Run evaluations
-  runEval: (evalData) => fetchAPI('/evals/run', {
-    method: 'POST',
-    body: JSON.stringify(evalData),
-  }),
-  
-  runBenchmark: (benchmarkId) => fetchAPI(`/evals/run-benchmark/${benchmarkId}`, {
-    method: 'POST',
-  }),
-  
+  runEval: (evalData) =>
+    fetchAPI("/evals/run", {
+      method: "POST",
+      body: JSON.stringify(evalData),
+    }),
+
+  runBenchmark: (benchmarkId) =>
+    fetchAPI(`/evals/run-benchmark/${benchmarkId}`, {
+      method: "POST",
+    }),
+
   // Quick tests
-  quickAccuracyTest: (inputText, expectedOutput, modelId = null) => 
-    fetchAPI(`/evals/quick-test/accuracy?input_text=${encodeURIComponent(inputText)}&expected_output=${encodeURIComponent(expectedOutput)}${modelId ? `&model_id=${modelId}` : ''}`, {
-      method: 'POST',
-    }),
-  
+  quickAccuracyTest: (inputText, expectedOutput, modelId = null) =>
+    fetchAPI(
+      `/evals/quick-test/accuracy?input_text=${encodeURIComponent(inputText)}&expected_output=${encodeURIComponent(expectedOutput)}${modelId ? `&model_id=${modelId}` : ""}`,
+      {
+        method: "POST",
+      },
+    ),
+
   quickPerformanceTest: (inputText, modelId = null) =>
-    fetchAPI(`/evals/quick-test/performance?input_text=${encodeURIComponent(inputText)}${modelId ? `&model_id=${modelId}` : ''}`, {
-      method: 'POST',
-    }),
-  
+    fetchAPI(
+      `/evals/quick-test/performance?input_text=${encodeURIComponent(inputText)}${modelId ? `&model_id=${modelId}` : ""}`,
+      {
+        method: "POST",
+      },
+    ),
+
   // Benchmarks
   getBenchmarks: (evalType = null, activeOnly = true) => {
     const params = new URLSearchParams();
-    if (evalType) params.append('eval_type', evalType);
-    params.append('active_only', activeOnly);
+    if (evalType) params.append("eval_type", evalType);
+    params.append("active_only", activeOnly);
     return fetchAPI(`/evals/benchmarks?${params}`);
   },
-  
-  createBenchmark: (benchmarkData) => fetchAPI('/evals/benchmarks', {
-    method: 'POST',
-    body: JSON.stringify(benchmarkData),
-  }),
-  
-  deleteBenchmark: (benchmarkId) => fetchAPI(`/evals/benchmarks/${benchmarkId}`, {
-    method: 'DELETE',
-  }),
+
+  createBenchmark: (benchmarkData) =>
+    fetchAPI("/evals/benchmarks", {
+      method: "POST",
+      body: JSON.stringify(benchmarkData),
+    }),
+
+  deleteBenchmark: (benchmarkId) =>
+    fetchAPI(`/evals/benchmarks/${benchmarkId}`, {
+      method: "DELETE",
+    }),
 };
 
 // ============ MCP API ============
 
 export const mcpAPI = {
   // Get all MCP servers
-  getServers: (enabledOnly = false) => 
+  getServers: (enabledOnly = false) =>
     fetchAPI(`/mcp/servers?enabled_only=${enabledOnly}`),
-  
+
   // Get a single server by ID
   getServer: (serverId) => fetchAPI(`/mcp/servers/${serverId}`),
-  
+
   // Create a new MCP server
-  createServer: (serverData) => fetchAPI('/mcp/servers', {
-    method: 'POST',
-    body: JSON.stringify(serverData),
-  }),
-  
+  createServer: (serverData) =>
+    fetchAPI("/mcp/servers", {
+      method: "POST",
+      body: JSON.stringify(serverData),
+    }),
+
   // Update an MCP server
-  updateServer: (serverId, updateData) => fetchAPI(`/mcp/servers/${serverId}`, {
-    method: 'PUT',
-    body: JSON.stringify(updateData),
-  }),
-  
+  updateServer: (serverId, updateData) =>
+    fetchAPI(`/mcp/servers/${serverId}`, {
+      method: "PUT",
+      body: JSON.stringify(updateData),
+    }),
+
   // Delete an MCP server
-  deleteServer: (serverId) => fetchAPI(`/mcp/servers/${serverId}`, {
-    method: 'DELETE',
-  }),
-  
+  deleteServer: (serverId) =>
+    fetchAPI(`/mcp/servers/${serverId}`, {
+      method: "DELETE",
+    }),
+
   // Test connection to an MCP server
-  testConnection: (serverId) => fetchAPI(`/mcp/servers/${serverId}/test`, {
-    method: 'POST',
-  }),
-  
+  testConnection: (serverId) =>
+    fetchAPI(`/mcp/servers/${serverId}/test`, {
+      method: "POST",
+    }),
+
   // Connect to an MCP server
-  connectServer: (serverId) => fetchAPI(`/mcp/servers/${serverId}/connect`, {
-    method: 'POST',
-  }),
-  
+  connectServer: (serverId) =>
+    fetchAPI(`/mcp/servers/${serverId}/connect`, {
+      method: "POST",
+    }),
+
   // Disconnect from an MCP server
-  disconnectServer: (serverId) => fetchAPI(`/mcp/servers/${serverId}/disconnect`, {
-    method: 'POST',
-  }),
-  
+  disconnectServer: (serverId) =>
+    fetchAPI(`/mcp/servers/${serverId}/disconnect`, {
+      method: "POST",
+    }),
+
   // Get list of active connection IDs
-  getActiveConnections: () => fetchAPI('/mcp/active'),
-  
+  getActiveConnections: () => fetchAPI("/mcp/active"),
+
   // Get MCP statistics
-  getStats: () => fetchAPI('/mcp/stats'),
-  
+  getStats: () => fetchAPI("/mcp/stats"),
+
   // Get preset server templates
-  getPresets: () => fetchAPI('/mcp/presets'),
+  getPresets: () => fetchAPI("/mcp/presets"),
 };
 
 // ============ Skills API ============
 
 export const skillsAPI = {
   // Get all skills
-  getAll: () => fetchAPI('/skills/'),
-  
+  getAll: () => fetchAPI("/skills/"),
+
   // Get active skills
-  getActive: () => fetchAPI('/skills/active'),
-  
+  getActive: () => fetchAPI("/skills/active"),
+
   // Get a single skill
   get: (skillId) => fetchAPI(`/skills/${skillId}`),
-  
+
   // Create a new skill
-  create: (skillData) => fetchAPI('/skills/', {
-    method: 'POST',
-    body: JSON.stringify(skillData),
-  }),
-  
+  create: (skillData) =>
+    fetchAPI("/skills/", {
+      method: "POST",
+      body: JSON.stringify(skillData),
+    }),
+
   // Update a skill
-  update: (skillId, updateData) => fetchAPI(`/skills/${skillId}`, {
-    method: 'PUT',
-    body: JSON.stringify(updateData),
-  }),
-  
+  update: (skillId, updateData) =>
+    fetchAPI(`/skills/${skillId}`, {
+      method: "PUT",
+      body: JSON.stringify(updateData),
+    }),
+
   // Delete a skill
-  delete: (skillId) => fetchAPI(`/skills/${skillId}`, {
-    method: 'DELETE',
-  }),
+  delete: (skillId) =>
+    fetchAPI(`/skills/${skillId}`, {
+      method: "DELETE",
+    }),
+};
+
+// =========== Voice Talk API ============
+export const voiceAPI = {
+  // Get available TTS voices
+  getVoices: () => fetchAPI("/voice/voices"),
+
+  // Create WebSocket connection for live talk
+  createConnection: (onMessage, onClose, onError) => {
+    const wsUrl = API_BASE_URL.replace("http://", "ws://")
+      .replace("https://", "wss://")
+      .replace("/api", "");
+
+    const ws = new WebSocket(`${wsUrl}/api/voice/ws/talk`);
+
+    ws.onopen = () => {
+      console.log("🎙️ Voice WebSocket connected");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessage?.(data);
+      } catch (e) {
+        console.error("Failed to parse voice message:", e);
+      }
+    };
+
+    ws.onclose = (event) => {
+      console.log("🎙️ Voice WebSocket closed", event.code);
+      onClose?.(event);
+    };
+
+    ws.onerror = (error) => {
+      console.error("🎙️ Voice WebSocket error:", error);
+      onError?.(error);
+    };
+
+    return {
+      send: (data) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(data));
+        }
+      },
+      close: () => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "end_call" }));
+          setTimeout(() => ws.close(), 500);
+        }
+      },
+      getState: () => ws.readyState,
+      ws,
+    };
+  },
 };
 
 export default {
@@ -387,4 +497,5 @@ export default {
   evals: evalsAPI,
   mcp: mcpAPI,
   skills: skillsAPI,
+  voice: voiceAPI,
 };

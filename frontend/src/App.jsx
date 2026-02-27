@@ -8,6 +8,7 @@ import MCPManager from '@/components/MCPManager'
 import SkillManager from '@/components/SkillManager'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { chatAPI, documentsAPI, settingsAPI, healthAPI } from '@/services/api'
+import LiveTalk from '@/components/LiveTalk'
 
 // Helper to get/set localStorage
 const STORAGE_KEY = 'knowledge-ai-selected-chat'
@@ -46,6 +47,7 @@ function App() {
   const [showDashboard, setShowDashboard] = useState(false)
   const [showMCP, setShowMCP] = useState(false)
   const [showSkills, setShowSkills] = useState(false)
+  const [showLiveTalk, setShowLiveTalk] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
 
   // Persist selectedChatId to localStorage
@@ -559,6 +561,17 @@ function App() {
     }
   }, [isBackendOnline])
 
+  const handleOpenLiveTalk = useCallback(() => {
+    setShowLiveTalk(true)
+    setShowDashboard(false)
+    setShowMCP(false)
+    setShowSkills(false)
+  }, [])
+
+  const handleCloseLiveTalk = useCallback(() => {
+    setShowLiveTalk(false)
+  }, [])
+
   return (
     <div className="h-screen flex bg-background text-foreground overflow-hidden">
       {/* Sidebar */}
@@ -586,14 +599,18 @@ function App() {
           isBackendOnline={isBackendOnline}
           onOpenDashboard={() => { setShowDashboard(true); setShowMCP(false); }}
           onOpenMCP={() => { setShowMCP(true); setShowDashboard(false); setShowSkills(false); }}
+          onOpenLiveTalk={handleOpenLiveTalk}
           showDashboard={showDashboard}
           showMCP={showMCP}
           showSkills={showSkills}
+          showLiveTalk={showLiveTalk}
           mode={mode}
           onModeChange={setMode}
         />
         
-        {showDashboard ? (
+        {showLiveTalk ? (
+          <LiveTalk onBack={handleCloseLiveTalk} mode={mode} />
+        ) : showDashboard ? (
           <EvalDashboard onBack={() => setShowDashboard(false)} />
         ) : showMCP ? (
           <ErrorBoundary>

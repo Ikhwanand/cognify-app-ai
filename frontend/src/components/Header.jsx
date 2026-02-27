@@ -1,7 +1,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Moon, Sun, Sparkles, Github, Wifi, WifiOff, MessagesSquare, BarChart3, Zap, Bot, BarChart, Code2 } from "lucide-react"
+import { Moon, Sun, Sparkles, Github, Wifi, WifiOff, MessagesSquare, BarChart3, Zap, Bot, BarChart, Code2, Phone } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const Header = ({ 
@@ -11,9 +11,11 @@ const Header = ({
   isBackendOnline = false,
   onOpenDashboard,
   onOpenMCP,
+  onOpenLiveTalk,
   showDashboard = false,
   showMCP = false,
   showSkills = false,
+  showLiveTalk = false,
   mode = "chat",
   onModeChange,
   className 
@@ -35,6 +37,11 @@ const Header = ({
             <Zap className="h-5 w-5 text-purple-500" />
             <h1 className="font-medium text-sm">MCP Servers</h1>
           </>
+        ) : showLiveTalk ? (
+          <>
+            <Phone className="h-5 w-5 text-green-500" />
+            <h1 className="font-medium text-sm">Live Talk</h1>
+          </>
         ) : currentChatTitle ? (
           <>
             <MessagesSquare className="h-5 w-5 text-primary" />
@@ -48,7 +55,7 @@ const Header = ({
       </div>
 
       {/* Center - Mode Selection */}
-      {!showDashboard && !showMCP && !showSkills && (
+      {!showDashboard && !showMCP && !showSkills && !showLiveTalk && (
         <div className="flex justify-center items-center flex-1 mx-4">
           <Select value={mode} onValueChange={onModeChange}>
             <SelectTrigger className="w-[180px] h-9 bg-background">
@@ -99,6 +106,19 @@ const Header = ({
             </>
           )}
         </div>
+
+        {/* Live Talk button */}
+        {!showLiveTalk && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenLiveTalk}
+            className="h-9 gap-2 text-muted-foreground hover:text-green-500 transition-colors"
+          >
+            <Phone className="h-4 w-4" />
+            <span className="hidden sm:inline">Live Talk</span>
+          </Button>
+        )}
 
         {/* MCP button */}
         {!showMCP && (

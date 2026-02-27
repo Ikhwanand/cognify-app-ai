@@ -19,6 +19,7 @@ A personal knowledge assistant powered by RAG (Retrieval Augmented Generation). 
 - ⚙️ **Configurable Models** - Switch between Groq and Nvidia NIM models
 - 📊 **Chat History** - Persistent conversation history
 - 🔧 **Customizable Settings** - Temperature, system prompts, and more
+- 🎤 **Live Talk** - Real-time voice chat with AI
 
 ## 🛠️ Tech Stack
 

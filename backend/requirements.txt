@@ -31,3 +31,4 @@ pycountry
 slowapi
 pygithub
 fastmcp
+edge-tts
