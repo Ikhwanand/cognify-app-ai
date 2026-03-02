@@ -195,6 +195,165 @@ async def voice_talk(websocket: WebSocket):
                     # On error, explicitly tell frontend to go idle
                     await websocket.send_json({"type": "status", "status": "idle"})
 
+            elif data.get("type") == "vision_speech":
+                user_text = data.get("text", "").strip()
+                image_b64 = data.get("image")  # base64 JPEG from webcam
+                voice = data.get("voice", tts_service.DEFAULT_VOICE)
+                mode = data.get("mode", "chat")
+                rate = data.get("rate", "+0%")
+
+                if not user_text and not image_b64:
+                    await websocket.send_json(
+                        {"type": "error", "message": "No speech or image provided"}
+                    )
+                    continue
+
+                # If no text but has image, use a default prompt
+                if not user_text and image_b64:
+                    user_text = "What do you see in this image? Describe it."
+
+                # Handle session (same logic as user_speech)
+                req_session_id = data.get("session_id")
+                with Session(engine) as db:
+                    if req_session_id:
+                        session_id = req_session_id
+                        session = db.get(ChatSession, session_id)
+                        if not session:
+                            session = ChatSession(
+                                id=req_session_id,
+                                title=f"👁️ {user_text[:40]}",
+                            )
+                            db.add(session)
+                            db.commit()
+                            db.refresh(session)
+                    elif not session_id:
+                        session = ChatSession(title=f"👁️ {user_text[:40]}")
+                        db.add(session)
+                        db.commit()
+                        db.refresh(session)
+                        session_id = session.id
+
+                    user_msg = ChatMessage(
+                        session_id=session_id,
+                        role="user",
+                        content=f"[📷 Vision] {user_text}",
+                    )
+                    db.add(user_msg)
+                    db.commit()
+
+                await websocket.send_json(
+                    {"type": "session_id", "session_id": session_id}
+                )
+                await websocket.send_json({"type": "status", "status": "thinking"})
+
+                try:
+                    from routers.settings import _user_settings
+                    from schemas.chat import FileAttachment
+
+                    settings_dict = _user_settings.model_dump()
+
+                    # Build image as FileAttachment for agent_service
+                    vision_files = None
+                    if image_b64:
+                        vision_files = [
+                            FileAttachment(
+                                name="webcam_frame.jpg",
+                                type="image/jpeg",
+                                size=len(image_b64),
+                                data=image_b64,
+                            )
+                        ]
+
+                    # Enhanced prompt for vision
+                    vision_prompt = (
+                        f"[Live Video Call - Vision Mode] "
+                        f"The user is showing you their camera. "
+                        f'User said: "{user_text}" '
+                        f"Analyze the image and respond naturally. "
+                        f"Keep responses concise (2-4 sentences) since this is a voice conversation."
+                    )
+
+                    # Use the existing agent_service.chat() which handles multimodal
+                    ai_response = await agent_service.chat(
+                        message=vision_prompt,
+                        session_id=session_id,
+                        user_settings=settings_dict,
+                        files=vision_files,
+                        mode=mode,
+                    )
+
+                    await websocket.send_json(
+                        {
+                            "type": "transcript",
+                            "text": ai_response,
+                            "role": "assistant",
+                        }
+                    )
+
+                    with Session(engine) as db:
+                        ai_msg = ChatMessage(
+                            session_id=session_id,
+                            role="assistant",
+                            content=ai_response,
+                        )
+                        db.add(ai_msg)
+                        db.commit()
+
+                    await websocket.send_json({"type": "status", "status": "speaking"})
+
+                    clean_text = _clean_for_tts(ai_response)
+                    if clean_text:
+                        try:
+                            async for audio_chunk in tts_service.synthesize_stream(
+                                text=clean_text, voice=voice, rate=rate
+                            ):
+                                audio_b64_out = base64.b64encode(audio_chunk).decode(
+                                    "utf-8"
+                                )
+                                await websocket.send_json(
+                                    {"type": "audio_chunk", "data": audio_b64_out}
+                                )
+                        except Exception as tts_err:
+                            print(f"TTS Error: {tts_err}")
+                            await websocket.send_json(
+                                {
+                                    "type": "error",
+                                    "message": f"TTS Error: {str(tts_err)}",
+                                }
+                            )
+
+                    await websocket.send_json({"type": "audio_end"})
+
+                except Exception as e:
+                    error_str = str(e).lower()
+                    import traceback
+
+                    traceback.print_exc()
+
+                    # Detect specific vision errors and show friendly messages
+                    model_name = settings_dict.get("model", "unknown")
+                    if (
+                        "429" in str(e)
+                        or "too many requests" in error_str
+                        or "rate limit" in error_str
+                    ):
+                        error_msg = f"⚠️ Rate limit reached for {model_name}. Please wait a minute and try again."
+                    elif (
+                        "image" in error_str
+                        or "vision" in error_str
+                        or "multimodal" in error_str
+                        or "not supported" in error_str
+                    ):
+                        error_msg = f"⚠️ Model '{model_name}' does not support vision/image input. Please switch to a vision-capable model (e.g., Gemini, GPT-4o)."
+                    else:
+                        error_msg = f"⚠️ Vision error: {str(e)[:200]}"
+
+                    # Send as transcript so user sees it in chat
+                    await websocket.send_json(
+                        {"type": "transcript", "text": error_msg, "role": "assistant"}
+                    )
+                    await websocket.send_json({"type": "status", "status": "idle"})
+
             elif data.get("type") == "end_call":
                 await websocket.send_json(
                     {"type": "call_ended", "session_id": session_id}
