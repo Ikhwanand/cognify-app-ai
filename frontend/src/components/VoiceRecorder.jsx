@@ -130,17 +130,74 @@ const VoiceRecorder = ({
         }
       }
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         // Process recorded audio
         if (audioChunksRef.current.length > 0) {
-          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType })
-          const audioUrl = URL.createObjectURL(audioBlob)
+          const rawBlob = new Blob(audioChunksRef.current, { type: mimeType })
+          let finalBlob = rawBlob;
+          let finalMime = mimeType;
+          
+          try {
+            // Convert to standard PCM WAV locally in-browser
+            const arrayBuffer = await rawBlob.arrayBuffer();
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            
+            const numOfChan = Math.min(audioBuffer.numberOfChannels, 2);
+            const length = audioBuffer.length * numOfChan * 2;
+            const buffer = new ArrayBuffer(44 + length);
+            const view = new DataView(buffer);
+            
+            const writeString = (view, offset, string) => {
+              for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+              }
+            }
+            
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + length, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true); // PCM format
+            view.setUint16(22, numOfChan, true);
+            view.setUint32(24, audioBuffer.sampleRate, true);
+            view.setUint32(28, audioBuffer.sampleRate * 2 * numOfChan, true);
+            view.setUint16(32, numOfChan * 2, true);
+            view.setUint16(34, 16, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, length, true);
+            
+            const channels = [];
+            for (let i = 0; i < numOfChan; i++) {
+              channels.push(audioBuffer.getChannelData(i));
+            }
+            
+            let offset = 44;
+            let pos = 0;
+            while (pos < audioBuffer.length) {
+              for (let i = 0; i < numOfChan; i++) {
+                let sample = Math.max(-1, Math.min(1, channels[i][pos]));
+                sample = sample < 0 ? sample * 32768 : sample * 32767;
+                view.setInt16(offset, sample, true);
+                offset += 2;
+              }
+              pos++;
+            }
+            
+            finalBlob = new Blob([buffer], { type: 'audio/wav' });
+            finalMime = 'audio/wav';
+          } catch(e) {
+            console.error("Failed to convert audio to WAV in browser:", e);
+          }
+
+          const audioUrl = URL.createObjectURL(finalBlob)
           
           onRecordingComplete?.({
-            blob: audioBlob,
+            blob: finalBlob,
             url: audioUrl,
             duration: durationRef.current,
-            mimeType: mimeType
+            mimeType: finalMime
           })
         }
         setState(RecordingState.IDLE)

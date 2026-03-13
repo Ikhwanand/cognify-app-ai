@@ -5,6 +5,7 @@ sqlalchemy
 psycopg2-binary
 pgvector
 agno
+openai
 groq
 python-multipart
 pypdf
@@ -12,6 +13,8 @@ python-docx
 pydantic
 pydantic-settings
 sqlmodel
+sentence-transformers
+nltk
 
 # Agno tool dependencies
 ddgs
@@ -32,3 +35,30 @@ slowapi
 pygithub
 fastmcp
 edge-tts
+
+# LuxTTS dependencies
+--find-links https://k2-fsa.github.io/icefall/piper_phonemize.html
+
+torch
+torchaudio
+numpy
+lhotse
+huggingface_hub
+safetensors
+tensorboard
+vocos
+pydub
+onnxruntime
+git+https://github.com/ysharma3501/LinaCodec.git
+librosa
+transformers<=4.57.6
+
+# Normalization
+cn2an
+inflect
+
+# Tokenization
+jieba
+piper_phonemize
+pypinyin
+setuptools<81

@@ -437,8 +437,70 @@ export const skillsAPI = {
 
 // =========== Voice Talk API ============
 export const voiceAPI = {
-  // Get available TTS voices
+  // Get available TTS voices (Edge-TTS)
   getVoices: () => fetchAPI("/voice/voices"),
+
+  // Get custom voices (LuxTTS)
+  getCustomVoices: () => fetchAPI("/voice/custom-voices"),
+
+  // Upload custom voice for cloning
+  uploadCustomVoice: async (file, name = null) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (name) formData.append("name", name);
+
+    const url = `${API_BASE_URL}/voice/custom-voice/upload`;
+    const response = await fetch(url, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response
+        .json()
+        .catch(() => ({ detail: "Upload failed" }));
+      throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  // Record and upload custom voice
+  recordCustomVoice: async (audioBlob, name = "Recorded Voice") => {
+    // Convert blob to base64
+    const reader = new FileReader();
+    const base64Promise = new Promise((resolve) => {
+      reader.onloadend = () => {
+        const base64 = reader.result.split(",")[1];
+        resolve(base64);
+      };
+      reader.readAsDataURL(audioBlob);
+    });
+    const audioData = await base64Promise;
+
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("audio_data", audioData);
+
+    const url = `${API_BASE_URL}/voice/custom-voice/record`;
+    const response = await fetch(url, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response
+        .json()
+        .catch(() => ({ detail: "Record failed" }));
+      throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  // Delete custom voice
+  deleteCustomVoice: (voiceId) =>
+    fetchAPI(`/voice/custom-voice/${voiceId}`, { method: "DELETE" }),
 
   // Create WebSocket connection for live talk
   createConnection: (onMessage, onClose, onError) => {

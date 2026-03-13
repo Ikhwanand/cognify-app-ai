@@ -7,6 +7,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
 } from "./ui/select";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -24,8 +26,13 @@ import {
   Camera,
   Eye,
   EyeOff,
+  Upload,
+  CircleDot,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { voiceAPI } from "@/services/api";
+import Avatar3D from "./Avatar3D";
 
 // Audio player helper
 class AudioStreamPlayer {
@@ -48,7 +55,6 @@ class AudioStreamPlayer {
   }
 
   addChunk(base64Data) {
-    // Convert base64 to ArrayBuffer
     const binary = atob(base64Data);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
@@ -63,7 +69,6 @@ class AudioStreamPlayer {
     this.init();
     this.isPlaying = true;
 
-    // Merge all chunks into one ArrayBuffer
     const totalLength = this.chunks.reduce(
       (sum, chunk) => sum + chunk.byteLength,
       0,
@@ -89,7 +94,6 @@ class AudioStreamPlayer {
       source.start(0);
     } catch (err) {
       console.error("Audio decode error:", err);
-      // Fallback: play as blob
       try {
         const blob = new Blob(
           this.chunks.map((c) => new Uint8Array(c)),
@@ -138,16 +142,15 @@ function useSpeechRecognition({
   const [isListening, setIsListening] = useState(false);
   const abortCountRef = useRef(0);
   const restartTimerRef = useRef(null);
-  const startRef = useRef(null); // self-reference for onend restart
+  const startRef = useRef(null);
 
   const stop = useCallback(() => {
-    // Clear any pending restart
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
     }
     if (recognitionRef.current) {
-      recognitionRef.current.onend = null; // Prevent auto-restart
+      recognitionRef.current.onend = null;
       recognitionRef.current.onerror = null;
       try {
         recognitionRef.current.stop();
@@ -161,7 +164,6 @@ function useSpeechRecognition({
   }, []);
 
   const start = useCallback(() => {
-    // Clean up any existing instance first
     if (recognitionRef.current) {
       recognitionRef.current.onend = null;
       recognitionRef.current.onerror = null;
@@ -181,7 +183,6 @@ function useSpeechRecognition({
       return false;
     }
 
-    // Create a fresh instance every time
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
@@ -194,7 +195,6 @@ function useSpeechRecognition({
       let interimTranscript = "";
       let finalTranscript = "";
 
-      // Reset abort counter on successful result
       abortCountRef.current = 0;
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -220,7 +220,6 @@ function useSpeechRecognition({
       if (event.error === "aborted") {
         wasAborted = true;
         abortCountRef.current += 1;
-        // Suppress console spam for aborted — it's expected during camera init
         return;
       }
       if (event.error !== "no-speech") {
@@ -237,7 +236,6 @@ function useSpeechRecognition({
         return;
       }
 
-      // If too many consecutive aborts, stop trying (prevents infinite loop)
       if (abortCountRef.current >= 5) {
         console.warn("STT: Too many aborts, waiting 3s before retry...");
         restartTimerRef.current = setTimeout(() => {
@@ -247,7 +245,6 @@ function useSpeechRecognition({
         return;
       }
 
-      // Restart with a fresh instance after a delay
       const delay = wasAborted ? 800 : 300;
       restartTimerRef.current = setTimeout(() => {
         startRef.current?.();
@@ -266,12 +263,10 @@ function useSpeechRecognition({
     }
   }, [language, onResult, onInterim, enabled]);
 
-  // Keep startRef in sync
   useEffect(() => {
     startRef.current = start;
   }, [start]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => stop();
   }, [stop]);
@@ -285,7 +280,6 @@ function WaveformVisualizer({ isActive, color = "rgba(168, 85, 247, 0.8)" }) {
   const animationRef = useRef(null);
   const barsRef = useRef(Array.from({ length: 32 }, () => 0.15));
 
-  // Initialize bars with random values once on mount
   useEffect(() => {
     barsRef.current = Array.from({ length: 32 }, () => Math.random() * 0.3);
   }, []);
@@ -305,11 +299,9 @@ function WaveformVisualizer({ isActive, color = "rgba(168, 85, 247, 0.8)" }) {
 
       for (let i = 0; i < bars.length; i++) {
         if (isActive) {
-          // Animate bars
           bars[i] += (Math.random() - 0.5) * 0.15;
           bars[i] = Math.max(0.05, Math.min(1, bars[i]));
         } else {
-          // Decay to low
           bars[i] *= 0.95;
           bars[i] = Math.max(0.05, bars[i]);
         }
@@ -346,6 +338,262 @@ function WaveformVisualizer({ isActive, color = "rgba(168, 85, 247, 0.8)" }) {
   );
 }
 
+// ============= Voice Upload/Record Modal ===============
+function VoiceUploadModal({ isOpen, onClose, onVoiceSaved }) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedBlob, setRecordedBlob] = useState(null);
+  const [voiceName, setVoiceName] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState("");
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const fileInputRef = useRef(null);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : "audio/mp4",
+      });
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const rawBlob = new Blob(chunksRef.current, { type: recorder.mimeType });
+        setRecordedBlob(rawBlob);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setError("");
+    } catch {
+      setError("Could not access microphone. Please check permissions.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const convertToWav = async (fileOrBlob) => {
+    try {
+      const arrayBuffer = await fileOrBlob.arrayBuffer();
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const numOfChan = Math.min(audioBuffer.numberOfChannels, 2);
+      const length = audioBuffer.length * numOfChan * 2;
+      const buffer = new ArrayBuffer(44 + length);
+      const view = new DataView(buffer);
+      const writeString = (view, offset, string) => {
+        for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+      };
+      writeString(view, 0, 'RIFF');
+      view.setUint32(4, 36 + length, true);
+      writeString(view, 8, 'WAVE');
+      writeString(view, 12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numOfChan, true);
+      view.setUint32(24, audioBuffer.sampleRate, true);
+      view.setUint32(28, audioBuffer.sampleRate * 2 * numOfChan, true);
+      view.setUint16(32, numOfChan * 2, true);
+      view.setUint16(34, 16, true);
+      writeString(view, 36, 'data');
+      view.setUint32(40, length, true);
+      const channels = [];
+      for (let i = 0; i < numOfChan; i++) channels.push(audioBuffer.getChannelData(i));
+      let offset = 44, pos = 0;
+      while (pos < audioBuffer.length) {
+        for (let i = 0; i < numOfChan; i++) {
+          let sample = Math.max(-1, Math.min(1, channels[i][pos]));
+          sample = sample < 0 ? sample * 32768 : sample * 32767;
+          view.setInt16(offset, sample, true);
+          offset += 2;
+        }
+        pos++;
+      }
+      return new File([buffer], "converted_audio.wav", { type: 'audio/wav' });
+    } catch (err) {
+      console.error("WAV conversion failed:", err);
+      return fileOrBlob; // Fallback
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const rawFile = e.target.files?.[0];
+    if (!rawFile) return;
+
+    setIsUploading(true);
+    setError("");
+    try {
+      const file = await convertToWav(rawFile);
+      const result = await voiceAPI.uploadCustomVoice(
+        file,
+        voiceName || rawFile.name.replace(/\.[^/.]+$/, "") + ".wav",
+      );
+      onVoiceSaved?.(result.voice);
+      onClose();
+    } catch (err) {
+      setError(err.message || "Upload failed");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSaveRecording = async () => {
+    if (!recordedBlob) return;
+
+    setIsUploading(true);
+    setError("");
+    try {
+      const wavBlob = await convertToWav(recordedBlob);
+      const result = await voiceAPI.recordCustomVoice(
+        wavBlob,
+        voiceName || "Recorded Voice",
+      );
+      onVoiceSaved?.(result.voice);
+      onClose();
+    } catch (err) {
+      setError(err.message || "Save failed");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-background border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Upload className="h-5 w-5 text-purple-400" />
+            Add Custom Voice
+          </h2>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            ✕
+          </Button>
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          Upload a WAV/MP3 file (min 3 seconds) or record your voice for AI
+          cloning.
+        </p>
+
+        {/* Voice name */}
+        <div>
+          <label className="text-xs text-muted-foreground font-medium mb-1 block">
+            Voice Name
+          </label>
+          <input
+            type="text"
+            value={voiceName}
+            onChange={(e) => setVoiceName(e.target.value)}
+            placeholder="e.g., My Voice"
+            className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+
+        {/* Upload file */}
+        <div className="space-y-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="audio/wav,audio/mp3,audio/mpeg,.wav,.mp3"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            className="w-full gap-2"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+          >
+            {isUploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            Upload Audio File
+          </Button>
+        </div>
+
+        {/* Divider */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-xs text-muted-foreground">or</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+
+        {/* Record */}
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            {!isRecording ? (
+              <Button
+                variant="outline"
+                className="flex-1 gap-2"
+                onClick={startRecording}
+                disabled={isUploading}
+              >
+                <CircleDot className="h-4 w-4 text-red-400" />
+                Start Recording
+              </Button>
+            ) : (
+              <Button
+                variant="destructive"
+                className="flex-1 gap-2 animate-pulse"
+                onClick={stopRecording}
+              >
+                <MicOff className="h-4 w-4" />
+                Stop Recording
+              </Button>
+            )}
+          </div>
+
+          {recordedBlob && !isRecording && (
+            <div className="space-y-2">
+              <audio
+                controls
+                src={URL.createObjectURL(recordedBlob)}
+                className="w-full h-10"
+              />
+              <Button
+                className="w-full gap-2 bg-purple-600 hover:bg-purple-700"
+                onClick={handleSaveRecording}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                Save & Clone Voice
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <p className="text-sm text-red-400 flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ============ Main LiveTalk Component ===============
 export default function LiveTalk({ onBack, mode = "chat" }) {
   // Connection state
@@ -353,11 +601,19 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
 
   // Voice state
   const [isMuted, setIsMuted] = useState(false);
-  const [aiStatus, setAiStatus] = useState("idle"); // idle, thinking, speaking
+  const [aiStatus, setAiStatus] = useState("idle");
   const [selectedVoice, setSelectedVoice] = useState("en-US-GuyNeural");
   const [availableVoices, setAvailableVoices] = useState([]);
   const [sttLanguage, setSttLanguage] = useState("en-US");
   const [showSettings, setShowSettings] = useState(false);
+
+  // TTS Engine state
+  const [ttsEngine, setTtsEngine] = useState("edge-tts");
+  const [customVoices, setCustomVoices] = useState([]);
+  const [selectedCustomVoice, setSelectedCustomVoice] = useState("");
+  const [showVoiceUpload, setShowVoiceUpload] = useState(false);
+  const [luxTTSAvailable, setLuxTTSAvailable] = useState(false);
+
 
   // Transcript
   const [transcripts, setTranscripts] = useState([]);
@@ -376,16 +632,15 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
   const [visionEnabled, setVisionEnabled] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const videoRef = useRef(null);
-  const canvasRef2 = useRef(null); // for capturing frames
-  const streamRef = useRef(null); // MediaStream ref
+  const canvasRef2 = useRef(null);
+  const streamRef = useRef(null);
 
-  // Refs for STT control (to avoid circular dependency with useSpeechRecognition)
+  // STT control ref
   const sttControlRef = useRef({ start: () => {}, stop: () => {} });
 
-  // ===== Camera Control (must be before handleSpeechResult) =====
+  // ===== Camera Control =====
   const startCamera = useCallback(async () => {
     try {
-      // Stop STT before requesting camera to avoid abort conflicts
       sttControlRef.current.stop();
 
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -397,14 +652,12 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
       }
       setCameraActive(true);
 
-      // Restart STT after camera is ready (small delay for stability)
       setTimeout(() => {
         sttControlRef.current.start();
       }, 500);
     } catch (err) {
       console.error("Camera error:", err);
       alert("Could not access camera. Please check permissions.");
-      // Restart STT even if camera failed
       sttControlRef.current.start();
     }
   }, []);
@@ -439,33 +692,34 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
 
       setInterimText("");
 
-      // Add user transcript
       setTranscripts((prev) => [
         ...prev,
         { role: "user", text, timestamp: new Date() },
       ]);
 
-      // Send to backend
       if (wsRef.current) {
+        const basePayload = {
+          session_id: sessionId,
+          voice: selectedVoice,
+          mode,
+          rate: "+0%",
+          tts_engine: ttsEngine,
+          custom_voice_id: ttsEngine === "luxtts" ? selectedCustomVoice : undefined,
+        };
+
         if (visionEnabled && cameraActive) {
-          // Capture camera frame and send with speech
           const frame = captureFrame();
           wsRef.current.send({
             type: "vision_speech",
             text,
             image: frame,
-            session_id: sessionId,
-            voice: selectedVoice,
-            mode,
+            ...basePayload,
           });
         } else {
-          // Normal voice-only
           wsRef.current.send({
             type: "user_speech",
             text,
-            session_id: sessionId,
-            voice: selectedVoice,
-            mode,
+            ...basePayload,
           });
         }
       }
@@ -476,6 +730,8 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
       sessionId,
       selectedVoice,
       mode,
+      ttsEngine,
+      selectedCustomVoice,
       visionEnabled,
       cameraActive,
       captureFrame,
@@ -502,7 +758,7 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
     language: sttLanguage,
   });
 
-  // Wire up STT control ref (used by startCamera to avoid circular deps)
+  // Wire up STT control ref
   useEffect(() => {
     sttControlRef.current = { start: startListening, stop: stopListening };
   }, [startListening, stopListening]);
@@ -518,22 +774,31 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
         }
       })
       .catch((err) => console.error("Failed to load voices:", err));
+
+    // Load custom voices
+    voiceAPI
+      .getCustomVoices()
+      .then((data) => {
+        if (data.voices) setCustomVoices(data.voices);
+        setLuxTTSAvailable(data.luxtts_available || false);
+      })
+      .catch((err) => console.error("Failed to load custom voices:", err));
   }, []);
+
+
 
   // Auto-scroll transcript
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcripts]);
 
-  // Sync STT with aiStatus — stop listening when AI is busy, restart when idle
+  // Sync STT with aiStatus
   useEffect(() => {
     if (!isInCall) return;
 
     if (aiStatus === "thinking" || aiStatus === "speaking") {
-      // Stop STT when AI is processing or speaking to avoid feedback
       stopListening();
     } else if (aiStatus === "idle" && !isMuted) {
-      // Resume STT when AI is done and mic is not muted
       startListening();
     }
   }, [aiStatus, isInCall, isMuted, startListening, stopListening]);
@@ -541,30 +806,28 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
   // ====== Call Control ======
 
   const endCall = useCallback(() => {
-    // Stop listening
     stopListening();
-
-    // Stop audio
     audioPlayerRef.current.stop();
 
-    // Close WebSocket
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
 
-    // Clear timer
     if (durationIntervalRef.current) {
       clearInterval(durationIntervalRef.current);
       durationIntervalRef.current = null;
     }
 
+    // Cleanup camera/vision
+    stopCamera();
+    setVisionEnabled(false);
+
     setIsInCall(false);
     setAiStatus("idle");
     setInterimText("");
-  }, [stopListening]);
+  }, [stopListening, stopCamera]);
 
-  // Cleanup on unmount
   useEffect(() => {
     const player = audioPlayerRef.current;
     return () => {
@@ -574,10 +837,8 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
   }, [endCall]);
 
   const startCall = useCallback(() => {
-    // Init audio context (needs user gesture)
     audioPlayerRef.current.init();
 
-    // Connect WebSocket
     const connection = voiceAPI.createConnection(
       // onMessage
       (data) => {
@@ -602,18 +863,21 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
             audioPlayerRef.current.addChunk(data.data);
             break;
           case "audio_end":
-            // Ensure status is 'speaking' during playback
             setAiStatus("speaking");
             if (audioPlayerRef.current.chunks.length > 0) {
-              // Play collected audio
               audioPlayerRef.current.onPlaybackEnd = () => {
                 setAiStatus("idle");
               };
               audioPlayerRef.current.playAll();
             } else {
-              // No audio chunks received — go back to idle
               setAiStatus("idle");
             }
+            break;
+
+          case "vision_unsupported":
+            // Auto-disable vision
+            setVisionEnabled(false);
+            stopCamera();
             break;
 
           case "error":
@@ -650,21 +914,18 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
 
     wsRef.current = connection;
 
-    // Wait for connection
     connection.ws.onopen = () => {
       setIsInCall(true);
       setCallDuration(0);
       setTranscripts([]);
 
-      // Start call timer
       durationIntervalRef.current = setInterval(() => {
         setCallDuration((prev) => prev + 1);
       }, 1000);
 
-      // Start listening
       startListening();
     };
-  }, [startListening]);
+  }, [startListening, stopCamera]);
 
   const toggleMute = useCallback(() => {
     if (isMuted) {
@@ -733,12 +994,8 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
   }, [visionEnabled, startCamera, stopCamera]);
 
   // Start/stop camera with call lifecycle
-  useEffect(() => {
-    if (!isInCall && cameraActive) {
-      stopCamera();
-      setVisionEnabled(false);
-    }
-  }, [isInCall, cameraActive, stopCamera]);
+  // Camera cleanup is handled in endCall callback, no need for separate effect
+  // that causes cascading setState
 
   // Cleanup camera on unmount
   useEffect(() => {
@@ -749,11 +1006,41 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
     };
   }, []);
 
+  // Custom voice saved handler
+  const handleVoiceSaved = (voice) => {
+    setCustomVoices((prev) => [...prev, voice]);
+    setSelectedCustomVoice(voice.id);
+    setTtsEngine("luxtts");
+    setShowVoiceUpload(false);
+  };
+
+  // Delete custom voice
+  const handleDeleteCustomVoice = async (voiceId) => {
+    try {
+      await voiceAPI.deleteCustomVoice(voiceId);
+      setCustomVoices((prev) => prev.filter((v) => v.id !== voiceId));
+      if (selectedCustomVoice === voiceId) {
+        setSelectedCustomVoice("");
+        setTtsEngine("edge-tts");
+      }
+    } catch (err) {
+      console.error("Failed to delete voice:", err);
+    }
+  };
+
   // ========= Render =============
   return (
     <div className="flex-1 flex flex-col bg-background overflow-hidden">
       {/* Hidden canvas for frame capture */}
       <canvas ref={canvasRef2} className="hidden" />
+
+      {/* Voice Upload Modal */}
+      <VoiceUploadModal
+        isOpen={showVoiceUpload}
+        onClose={() => setShowVoiceUpload(false)}
+        onVoiceSaved={handleVoiceSaved}
+      />
+
       {/* Top Bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <Button variant="ghost" size="sm" onClick={onBack} className="gap-2">
@@ -787,6 +1074,7 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
               "gap-2",
               visionEnabled && "bg-blue-600 hover:bg-blue-700 text-white",
             )}
+            title="Toggle Vision Mode"
           >
             {visionEnabled ? (
               <Eye className="h-4 w-4" />
@@ -801,24 +1089,93 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
       {/* Settings Panel (collapsible) */}
       {showSettings && (
         <div className="px-6 py-4 border-b border-border bg-muted/30 flex flex-wrap gap-4 items-end">
-          {/* Voice Selection */}
+          {/* TTS Engine Selection */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs text-muted-foreground font-medium">
-              AI Voice
+              TTS Engine
             </label>
-            <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-              <SelectTrigger className="w-[200px] h-9">
-                <SelectValue placeholder="Select voice" />
+            <Select value={ttsEngine} onValueChange={setTtsEngine}>
+              <SelectTrigger className="w-[160px] h-9">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {availableVoices.map((voice) => (
-                  <SelectItem key={voice.id} value={voice.id}>
-                    {voice.name} ({voice.gender})
-                  </SelectItem>
-                ))}
+                <SelectItem value="edge-tts">Edge TTS</SelectItem>
+                <SelectItem value="luxtts" disabled={!luxTTSAvailable}>
+                  LuxTTS (Clone)
+                  {!luxTTSAvailable && " ⚠️"}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {/* Voice Selection — conditional on engine */}
+          {ttsEngine === "edge-tts" ? (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-muted-foreground font-medium">
+                AI Voice
+              </label>
+              <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                <SelectTrigger className="w-[200px] h-9">
+                  <SelectValue placeholder="Select voice" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableVoices.map((voice) => (
+                    <SelectItem key={voice.id} value={voice.id}>
+                      {voice.name} ({voice.gender})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-muted-foreground font-medium">
+                Custom Voice
+              </label>
+              <div className="flex gap-2">
+                <Select
+                  value={selectedCustomVoice}
+                  onValueChange={setSelectedCustomVoice}
+                >
+                  <SelectTrigger className="w-[200px] h-9">
+                    <SelectValue placeholder="Select custom voice" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customVoices.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        No custom voices yet
+                      </div>
+                    ) : (
+                      customVoices.map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-3 gap-1.5"
+                  onClick={() => setShowVoiceUpload(true)}
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Add
+                </Button>
+                {selectedCustomVoice && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 px-2 text-red-400 hover:text-red-300"
+                    onClick={() => handleDeleteCustomVoice(selectedCustomVoice)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* STT Language */}
           <div className="flex flex-col gap-1.5">
@@ -841,56 +1198,25 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
         </div>
       )}
 
+
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Call Area */}
         <div
           className={cn(
-            "flex flex-col items-center justify-center gap-8 p-8",
-            showTranscript ? "flex-1" : "flex-1",
+            "flex flex-col items-center justify-center gap-6 p-8",
+            "flex-1",
           )}
         >
-          {/* Call Status Circle */}
-          <div
-            className={cn(
-              "relative w-48 h-48 rounded-full flex items-center justify-center transition-all duration-500",
-              isInCall
-                ? aiStatus === "thinking"
-                  ? "bg-yellow-500/10 ring-4 ring-yellow-500/30 animate-pulse"
-                  : aiStatus === "speaking"
-                    ? "bg-green-500/10 ring-4 ring-green-500/30"
-                    : "bg-purple-500/10 ring-4 ring-purple-500/30"
-                : "bg-muted/50 ring-2 ring-border",
-            )}
-          >
-            {/* Inner glow */}
-            {isInCall && (
-              <div
-                className={cn(
-                  "absolute inset-4 rounded-full opacity-20 animate-ping",
-                  aiStatus === "thinking"
-                    ? "bg-yellow-500"
-                    : aiStatus === "speaking"
-                      ? "bg-green-500"
-                      : "bg-purple-500",
-                )}
-              />
-            )}
-
-            {/* Icon */}
-            <div className="relative z-10">
-              {!isInCall ? (
-                <Phone className="h-16 w-16 text-muted-foreground" />
-              ) : aiStatus === "thinking" ? (
-                <Loader2 className="h-16 w-16 text-yellow-400 animate-spin" />
-              ) : aiStatus === "speaking" ? (
-                <Volume2 className="h-16 w-16 text-green-400" />
-              ) : isMuted ? (
-                <MicOff className="h-16 w-16 text-red-400" />
-              ) : (
-                <Mic className="h-16 w-16 text-purple-400" />
-              )}
-            </div>
+          {/* 3D Avatar — replaces old status circle */}
+          <div className="w-64 h-64 relative">
+            <Avatar3D
+              aiStatus={aiStatus}
+              isMuted={isMuted}
+              isInCall={isInCall}
+              visionEnabled={visionEnabled}
+            />
           </div>
 
           {/* Camera Preview */}
@@ -906,7 +1232,9 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
               />
               <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/60 px-2 py-1 rounded-full">
                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-[10px] text-white font-medium">LIVE</span>
+                <span className="text-[10px] text-white font-medium">
+                  LIVE
+                </span>
               </div>
               <div className="absolute bottom-2 right-2 bg-black/60 px-2 py-1 rounded-full">
                 <Camera className="h-3 w-3 text-white" />
@@ -923,6 +1251,12 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
                 </p>
                 <p className="text-2xl font-mono text-muted-foreground">
                   {formatDuration(callDuration)}
+                </p>
+                {/* Show active TTS engine */}
+                <p className="text-xs text-muted-foreground">
+                  {ttsEngine === "luxtts" && selectedCustomVoice
+                    ? `🎤 LuxTTS — ${customVoices.find((v) => v.id === selectedCustomVoice)?.name || "Custom"}`
+                    : `🔊 Edge TTS — ${availableVoices.find((v) => v.id === selectedVoice)?.name || selectedVoice}`}
                 </p>
               </>
             ) : (
@@ -952,7 +1286,7 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
             />
           )}
 
-          {/* Interim text (what user is currently saying) */}
+          {/* Interim text */}
           {interimText && aiStatus === "idle" && (
             <div className="px-4 py-2 rounded-lg bg-muted/50 text-sm text-muted-foreground italic max-w-md text-center">
               {interimText}...
@@ -1011,6 +1345,7 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
                       "bg-blue-600 hover:bg-blue-700 border-blue-600",
                   )}
                   onClick={toggleVision}
+                  title="Toggle camera"
                 >
                   <Camera
                     className={cn("h-6 w-6", visionEnabled && "text-white")}
@@ -1075,7 +1410,9 @@ export default function LiveTalk({ onBack, mode = "chat" }) {
                                 {...props}
                               />
                             ),
-                            li: (props) => <li className="mb-0.5" {...props} />,
+                            li: (props) => (
+                              <li className="mb-0.5" {...props} />
+                            ),
                             h1: (props) => (
                               <h1
                                 className="text-base font-bold mb-1.5 mt-2"

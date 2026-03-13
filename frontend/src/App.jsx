@@ -521,7 +521,7 @@ function App() {
         setIsLoading(false)
       }
     }
-  }, [selectedChatId, settings, isBackendOnline])
+  }, [selectedChatId, settings, isBackendOnline, mode])
 
   const getCurrentChatTitle = () => {
     if (!selectedChatId) return null

@@ -21,6 +21,7 @@ A personal knowledge assistant powered by RAG (Retrieval Augmented Generation). 
 - 🔧 **Customizable Settings** - Temperature, system prompts, and more
 - 🎤 **Live Talk** - Real-time voice chat with AI'
 - 👁️ **Live Vision** - Real-time vision chat with AI
+- 🗣️ **Voice Cloning** - Clone your voice and use it for AI responses
 
 ## 🛠️ Tech Stack
 
