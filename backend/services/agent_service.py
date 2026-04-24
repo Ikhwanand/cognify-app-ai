@@ -203,6 +203,7 @@ Use these tools proactively when the user's question would benefit from current 
             tools=tools,
             skills=skills_loader,
             enable_agentic_memory=True,
+            learning=True,
             # compression_manager=compression_manager,
             add_history_to_context=True,
             add_memories_to_context=True,
